@@ -5,7 +5,7 @@
 #' and a total of 4174 participants have developed diabetes by the end of the study.
 #'
 #' @format ## `diabetes`
-#' A data frame with 4,303 rows and 18 columns:
+#' A data frame with 211,833 rows and 24 columns:
 #' \describe{
 #'   \item{id}{study id for every individual}
 #'   \item{Age}{age of the individual in years}
