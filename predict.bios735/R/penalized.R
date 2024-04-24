@@ -49,7 +49,7 @@ penalized.logit = function(X, y, beta, lambda, iter = 1e3, tol = 1e-4){
     # Calculate z
     z = X %*% beta + (1 / w) * (y - pi)
     # Define penalization matrix with lambda
-    penalization = (lambda) * diag(ncol(X)) 
+    penalization = (lambda/length(y)) * diag(ncol(X)) 
     penalization[1,1] = 0 ## intercept is not penalized
     # Update beta using the formula for Ridge regression
     beta_t = solve((t_x_delta %*% X) + penalization) %*% (t_x_delta %*% z)
