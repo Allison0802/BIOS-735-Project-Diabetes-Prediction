@@ -1,10 +1,13 @@
 Package: predict.bios735
-Title: What the Package Does (One Line, Title Case)
+Title: Logistic Regression to Predict Binary Outcome
 Version: 0.0.0.9000
 Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"),
-           comment = c(ORCID = "YOUR-ORCID-ID"))
-Description: What the package does (one paragraph).
+    person("Anil", "Anderson", "aniland@unc.edu", role = c("aut", "cre"))
+    person("Arthi", "Hariharan", "arthih@unc.edu", role = c("aut", "cre"))
+    person("David", "Hu", "hsd@unc.edu", role = c("aut", "cre"))
+    person("Álvaro", "Quijano", "acquijanoa@unc.edu", role = c("aut", "cre"))
+    person("Yumei", "Yang", "yumeiy@unc.edu", role = c("aut", "cre"))
+Description: Implement Ridge-penalized logistic regression and Bayesian logistic regression to predict binary outcome.
 License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
     license
 Encoding: UTF-8

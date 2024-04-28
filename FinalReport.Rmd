@@ -1,0 +1,125 @@
+---
+title: "BIOS735 Final Project Report"
+author: "Group 5: Anil Anderson, Arthi Hariharan, David Hu, Álvaro Quijano, Yumei Yang"
+date: "5/1/2024"
+output:
+  html_document:
+    toc: true
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+---
+
+# Introduction
+
+
+## Dataset
+
+
+## Project Objectives
+
+(1). To identify the risk factors for Type 2 diabetes and test the importance of body mass index and age in incident diabetes using data from a cohort of Chinese adults.
+
+(2). To use the joint model to assess the association between survival outcome (death status and event time) with the drug efficacy and the latent mean of CD4 count at event time.
+
+(3). To assess and compare the model fitting result (mean and standard error) for the frequentist and Bayesian methods, as well a machine learning methods. We also simulated similar data to check and compare the model fitting results.
+
+(4). To propose a dynamic prediction framework to patients with longitudinal outcomes available, such as predicting the future longitudinal outcome and conditional survival probability at a given time.
+
+# Methods 
+
+
+
+### Model specification
+
+
+
+### Likelihood
+
+
+# Details in methods
+
+We used Ridge-penalized logistic regression, Bayesian methods, and Random Survival Forest to estimate parameters.
+
+### Penalized Ridge logistic regression
+
+
+### Bayesian methods
+
+
+### Random Survival Forest
+
+
+# Software implementation
+
+We write our package `jm5`. Here are the main functions:
+
+```{r eval=FALSE}
+
+```
+
+# Results 
+
+
+### Summary statistics for `diabetes` dataset
+
+```{r echo=FALSE}
+
+```
+
+
+
+### Model fit for `diabetes` dataset - Penalized Ridge regression 
+
+```{r, results = "hide"}
+
+```
+
+It is time-consuming to run MCEM and each iteration takes more than 1 minute. Although the algorithm is hard to converge and we only run 10 iterations, the estimates are still similar with the estimates given by Bayesian method below.
+
+### Model fit for `diabetes` dataset - Bayesian method
+
+```{r warning=FALSE, results="hide"}
+
+```
+
+### Random Forest for `diabetes` dataset
+
+```{r}
+
+```
+
+
+### Cross-validation: AUC and F1 score for `diabetes` dataset
+
+
+```{r}
+
+```
+
+# Discussion
+
+
+
+## Main conclusion
+
+
+## Limitations
+
+Below are some advantages and disadvantages of the three methods.
+
+### Penalized Ridge regression 
+
+
+
+### Bayesian method
+
+
+### RSF
+
+
+## Future direction
+
+
+# References 
+
