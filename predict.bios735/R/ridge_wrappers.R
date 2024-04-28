@@ -147,17 +147,17 @@ R <- function(y, x, log_posterior_curr, log_posterior_prop) {
 bayes.ridge.mcmc <- function(formula, data, chain_length = 60000, lambda_adapt = TRUE, 
                              seed = NULL, beta_init = NULL, lambda_init = NULL,
                              trace = FALSE) {
-  ##' Get time for chain
+  ## Get time for chain
   start.time <- Sys.time()
   
-  ##' Design matrix
+  ## Design matrix
   x <- model.matrix(formula, data)
   
-  ##' Save dimension of parameter vector
+  ## Save dimension of parameter vector
   dim <- ncol(x)
   
-  ##' Standardized design matrix: normalize columns to have mean 0 and variance 1; leave intercept as is
-  ##' This gives intercept interpretation as probability of response given mean covariates
+  ## Standardized design matrix: normalize columns to have mean 0 and variance 1; leave intercept as is
+  ## This gives intercept interpretation as probability of response given mean covariates
   x_std <- x
   sd_x <- rep(1, dim)
 
@@ -166,11 +166,11 @@ bayes.ridge.mcmc <- function(formula, data, chain_length = 60000, lambda_adapt =
     x_std[,j] <- (x_std[,j] - mean(x_std[,j])) / sd_x[j]
   }
   
-  ##' Obtain response vector
+  ## Obtain response vector
   formula.lhs <- as.character(formula[[2]])
   y <- data[[formula.lhs[1]]]
   
-  ##' Initialize beta at MLEs
+  ## Initialize beta at MLEs
   if (is.null(beta_init)) {
     beta <- suppressWarnings(summary(glm(formula, data, family = "binomial"))$coefficients[,1])
     beta[1] <- log(mean(y)/(1-mean(y))) # Initialize y at overall log-odds
@@ -178,52 +178,52 @@ bayes.ridge.mcmc <- function(formula, data, chain_length = 60000, lambda_adapt =
     beta <- beta_init
   }
   
-  ##' Choose initial value for lambda
+  ## Choose initial value for lambda
   if (is.null(lambda_init)) {
     lambda <- 1
   } else {
     lambda <- lambda_init
   }
   
-  ##' Initialize the chain matrix
+  ## Initialize the chain matrix
   chain <- matrix(0, chain_length, length(beta) + 1)
   chain[1,] <- c(beta, lambda)
   colnames(chain) = c(colnames(x), "lambda")
   
-  ##' Count the number of acceptances
+  ## Count the number of acceptances
   n.acc <- 0
   
-  ##' Count number of negative lambda proposals
+  ## Count number of negative lambda proposals
   n.lambda.neg <- 0
   
-  ##' Get unnormalized posterior for initial parameters
+  ## Get unnormalized posterior for initial parameters
   log_posterior_curr <- log_posterior_unnormalized(y, x_std, beta, lambda)
   
-  ##' Start chain
+  ## Start chain
   if (!is.null(seed)) {
     set.seed(seed)
   }
   for(i in 1:(chain_length-1)) {
     
-    ##' Set the value at current iteration of the chain to variable xt
+    ## Set the value at current iteration of the chain to variable xt
     curr <- chain[i,]
     
-    ##' Use independent multivariate normal for first 100 iterations, then switch to adaptive
+    ## Use independent multivariate normal for first 100 iterations, then switch to adaptive
     if (i < 100) {
       prop <- MASS::mvrnorm(1, curr, Sigma = diag(c(rep(1e-3, dim), 1e-2)))
     } else {
       prop <- proposal(chain, i, max(90, i/2), lambda_adapt)
     }
     
-    ##' Update n.lambda.neg
+    ## Update n.lambda.neg
     if (prop[length(prop)] < 0) {
       n.lambda.neg <- n.lambda.neg + 1
     }
     
-    ##' Calculate unnormalized log posterior of proposal
+    ## Calculate unnormalized log posterior of proposal
     log_posterior_prop <- log_posterior_unnormalized(y, x_std, prop[1:dim], prop[dim + 1])
     
-    ##' Calculate MH ratio 
+    ## Calculate MH ratio 
     r <- R(y, x_std, log_posterior_curr, log_posterior_prop)
     
     if (is.na(log_posterior_prop)) {
@@ -233,17 +233,17 @@ bayes.ridge.mcmc <- function(formula, data, chain_length = 60000, lambda_adapt =
       print(r)
     }
     
-    ##' Generate draw from bernoulli(p).
+    ## Generate draw from bernoulli(p).
     keep <- rbinom(1, 1, r)
     
-    ##' If keep = 1, then set next iteration equal to then proposal, update n.acc, 
-    ##' and set current posterior to proposal posterior
+    ## If keep = 1, then set next iteration equal to then proposal, update n.acc, 
+    ## and set current posterior to proposal posterior
     if (keep == 1){
       chain[i+1,] <- prop
       n.acc <- n.acc + 1
       log_posterior_curr <- log_posterior_prop
     }else{
-      ##' Otherwise, carry over value from the current iteration
+      ## Otherwise, carry over value from the current iteration
       chain[i+1,] <- curr
     }
     if (trace == TRUE) {
@@ -253,23 +253,23 @@ bayes.ridge.mcmc <- function(formula, data, chain_length = 60000, lambda_adapt =
     }
   }
   
-  ##' Get unscaled parameter estimates
+  ## Get unscaled parameter estimates
   chain_unscaled <- chain
   for (j in 2:dim) {
     chain_unscaled[,j] <- chain_unscaled[,j] / sd_x[j]
   }
   
-  ##' Calculate acceptance rate
+  ## Calculate acceptance rate
   acceptance_rate <- n.acc/chain_length
   acceptance_rate
   
-  ##' Print final message
+  ## Print final message
   end.time <- Sys.time()
   cat(paste0("Sample: ", chain_length, "/", chain_length, "    Acceptance rate: ", round(n.acc/i, 4), "\n",
              "Chain completed in ", round(difftime(time1 = end.time, time2 = start.time, units = "secs"), 2)
              , " seconds"))
   
-  ##' Return objects
+  ## Return objects
   list("chain" = as_draws_df(as.data.frame(chain_unscaled)), 
        "chain_std" = as_draws_df(as.data.frame(chain)), 
        "acceptance_rate" = acceptance_rate,
