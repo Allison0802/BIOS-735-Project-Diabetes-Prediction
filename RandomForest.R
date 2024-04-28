@@ -4,6 +4,7 @@ library(caret)
 library(ranger)
 library(mlr)
 load_all("predict.bios735")
+set.seed(1)
 
 table(diabetes_train$diabetes)
 
