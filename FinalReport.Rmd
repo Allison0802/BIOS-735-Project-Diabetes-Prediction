@@ -11,20 +11,72 @@ output:
 ---
 
 # Introduction
+The global prevalence of diabetes is rapidly increasing, with projections suggesting that by 2045, 783 million people will be living with diabetes. Type 2 Diabetes, in particular, is a major cause of severe health complications such as blindness, kidney failure, heart attacks, stroke, and lower limb amputation. 
 
+Early diagnosis is crucial for mitigating the effects of diabetes. And a predictive model is an indispensable tool for timely interventions and efficient allocation of. 
+
+Obesity is known to be positively associated with diabetes, while young age is often thought to be a protective factor against it. However, research also shows that prevalence of diabetes in people under 40 years old has been increasing. It is unclear whether there is an association between diabetes and body mass index (BMI), and how this might be impacted by age. 
+
+In this project, we aim to identify the risk factors for predicting Type 2 diabetes and assess the role of BMI and age in Type 2 diabetes using data from a cohort study of Chinese adults.
 
 ## Dataset
 
+This dataset comes from a Chinese cohort study conducted in 2016 with a median follow-up time of 3.1 years. Participants were free of diabetes at baseline and a total of 4174 participants have developed diabetes by the end of the study.
 
 ## Project Objectives
 
-(1). To identify the risk factors for Type 2 diabetes and test the importance of body mass index and age in incident diabetes using data from a cohort of Chinese adults.
+(1). To identify the risk factors for Type 2 diabetes
 
-(2). To use the joint model to assess the association between survival outcome (death status and event time) with the drug efficacy and the latent mean of CD4 count at event time.
+(2). To access the role of age and BMI in Type 2 diabetes
 
-(3). To assess and compare the model fitting result (mean and standard error) for the frequentist and Bayesian methods, as well a machine learning methods. We also simulated similar data to check and compare the model fitting results.
+(3). To compare predictive models based on penalized logistic regression, Bayesian-based penalized logistic regression models
 
-(4). To propose a dynamic prediction framework to patients with longitudinal outcomes available, such as predicting the future longitudinal outcome and conditional survival probability at a given time.
+# Data overview
+
+Our data is highly unbalanced, with less than 2% of diabetes cases and more than 98% non-diabetes cases:
+
+```{r}
+library(predict.bios735)
+library(tidyverse)
+data <- diabetes
+diabetes$Gender <- factor(diabetes$Gender, level = c(1, 2), labels = c("Male", "Female"))
+diabetes$diabetes <- factor(diabetes$diabetes, level = c(0, 1), labels = c("Non-diabetes", "Diabetes"))
+diabetes$history <- factor(diabetes$history, level = c(0, 1), labels = c("N", "Y"))
+
+# descriptive stats
+table1::table1(~ Age + Gender + height + weight + BMI + SBP + DBP + Cholesterol 
+               + Triglyceride + HDL + LDL + AST + BUN + CCR + smoke + drink + 
+                 history | diabetes, data = diabetes, render.continuous=c(.="Mean (SD)"))
+```
+
+LDL, HDL, AST, smoking status, and drinking status have more than 40% missingness, and interestingly, missingness of LDL-HDL, smoking-drinkingalmost always occurred simultaneously. Since the data was pulled from a medical record databse, we assumed that those variables were missing completely at random (MCAR) and imputated the missing values for out further analysis. 
+
+```{r}
+# missing patterns
+diabetes |>
+  select(HDL, LDL, AST, smoke, drink) |>
+  naniar::gg_miss_upset()
+```
+
+Unsurprisingly, we found the following sets of highly correlated variables:
+- weight and height/BMI
+- gender and CRR/height/weight
+- cholesterol and LDL
+- AST and ALT
+
+
+```{r}
+# correlation heatmap
+corr_mat <- round(cor(select(data, -c(id, diabetes, FPG, FPG_final)), use = "complete.obs"),2)
+melted_corr_mat <- reshape2::melt(corr_mat)
+
+ggplot(melted_corr_mat, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile() +
+  scale_fill_gradient(low = "#FFDD95", high = "#4c9cd3", guide = "colorbar") +
+  labs(x = "", y = "")
+```
+
+Based on the missing patterns and correlation, we removed HDL and LDL from our analysis because they are correlated with cholesterol and had more than 40% missingness. We also dropped weight variable because we believe that it can be fully represented by height and BMI combined.
 
 # Methods 
 
