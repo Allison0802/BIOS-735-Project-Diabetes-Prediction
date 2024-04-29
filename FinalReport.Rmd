@@ -12,30 +12,74 @@ output:
 
 # Introduction
 
+The global prevalence of diabetes is rapidly increasing, with projections suggesting that by 2045, 783 million people will be living with diabetes. Type 2 Diabetes, in particular, is a major cause of severe health complications such as blindness, kidney failure, heart attacks, stroke, and lower limb amputation.
+
+Early diagnosis is crucial for mitigating the effects of diabetes. And a predictive model is an indispensable tool for timely interventions and efficient allocation of.
+
+Obesity is known to be positively associated with diabetes, while young age is often thought to be a protective factor against it. However, research also shows that prevalence of diabetes in people under 40 years old has been increasing. It is unclear whether there is an association between diabetes and body mass index (BMI), and how this might be impacted by age.
+
+In this project, we aim to identify the risk factors for predicting Type 2 diabetes and assess the role of BMI and age in Type 2 diabetes using data from a cohort study of Chinese adults.
 
 ## Dataset
 
+This dataset comes from a Chinese cohort study conducted in 2016 with a median follow-up time of 3.1 years. Participants were free of diabetes at baseline and a total of 4174 participants have developed diabetes by the end of the study.
 
 ## Project Objectives
 
-(1). To identify the risk factors for Type 2 diabetes and test the importance of body mass index and age in incident diabetes using data from a cohort of Chinese adults.
+(1). To identify the risk factors for Type 2 diabetes
 
-(2). To use the joint model to assess the association between survival outcome (death status and event time) with the drug efficacy and the latent mean of CD4 count at event time.
+(2). To access the role of age and BMI in Type 2 diabetes
 
-(3). To assess and compare the model fitting result (mean and standard error) for the frequentist and Bayesian methods, as well a machine learning methods. We also simulated similar data to check and compare the model fitting results.
+(3). To compare predictive models based on penalized logistic regression, Bayesian-based penalized logistic regression models
 
-(4). To propose a dynamic prediction framework to patients with longitudinal outcomes available, such as predicting the future longitudinal outcome and conditional survival probability at a given time.
+# Data overview
 
-# Methods 
+Our data is highly unbalanced, with less than 2% of diabetes cases and more than 98% non-diabetes cases:
 
+```{r}
+library(predict.bios735)
+library(tidyr)
+library(tidyverse)
+data <- diabetes
+diabetes$Gender <- factor(diabetes$Gender, level = c(1, 2), labels = c("Male", "Female"))
+diabetes$diabetes <- factor(diabetes$diabetes, level = c(0, 1), labels = c("Non-diabetes", "Diabetes"))
+diabetes$history <- factor(diabetes$history, level = c(0, 1), labels = c("N", "Y"))
 
+# descriptive stats
+table1::table1(~ Age + Gender + height + weight + BMI + SBP + DBP + Cholesterol 
+               + Triglyceride + HDL + LDL + AST + BUN + CCR + smoke + drink + 
+                 history | diabetes, data = diabetes, render.continuous=c(.="Mean (SD)"))
+```
+
+LDL, HDL, AST, smoking status, and drinking status have more than 40% missingness, and interestingly, missingness of LDL-HDL, smoking-drinkingalmost always occurred simultaneously. Since the data was pulled from a medical record databse, we assumed that those variables were missing completely at random (MCAR) and imputated the missing values for out further analysis.
+
+```{r}
+# missing patterns
+diabetes |>
+  select(HDL, LDL, AST, smoke, drink) |>
+  naniar::gg_miss_upset()
+```
+
+Unsurprisingly, we found the following sets of highly correlated variables: - weight and height/BMI - gender and CRR/height/weight - cholesterol and LDL - AST and ALT
+
+```{r}
+# correlation heatmap
+corr_mat <- round(cor(select(data, -c(id, diabetes, FPG, FPG_final)), use = "complete.obs"),2)
+melted_corr_mat <- reshape2::melt(corr_mat)
+
+ggplot(melted_corr_mat, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile() +
+  scale_fill_gradient(low = "#FFDD95", high = "#4c9cd3", guide = "colorbar") +
+  labs(x = "", y = "")
+```
+
+Based on the missing patterns and correlation, we removed HDL and LDL from our analysis because they are correlated with cholesterol and had more than 40% missingness. We also dropped weight variable because we believe that it can be fully represented by height and BMI combined.
+
+# Methods
 
 ### Model specification
 
-
-
 ### Likelihood
-
 
 # Details in methods
 
@@ -43,12 +87,40 @@ We used Ridge-penalized logistic regression, Bayesian methods, and Random Surviv
 
 ### Penalized Ridge logistic regression
 
+In order to mitigate the risk of over-fitting for diabetes prediction and select the most relevant risk factors, we opted for penalized logistic regression. This approach reduces the chances of over-fitting while controlling the complexity in the model.
+
+Let $x_{ij}$ denote the observed data, where $i$ corresponds to patients and $j$ corresponds to the independent variables such as age, gender, Body Mass Index (BMI), total cholesterol (Chol), triglyceride levels (TG), creatinine (Cr), and others, with $i = 1, \ldots, n$, and $j$ the number of predictors. Let $y_i$ represent the binary outcome for observation $i$, indicating the presence or absence of diabetes. Our goal is to classify observations based on the binary outcome $y_i$, considering the covariates represented by $X$ and identifying the risk factors associated to diabetes.
+
+The log-likelihood for the model can be written as, \begin{align}
+    l(\beta) & = \sum_{i=1}^{n} \{y_i \log(\pi(x_{i};\beta)) \}  + (1-y_i) \log(1-\pi(x_{i},\beta))\}\\
+    & = \sum_{i=1}^{n}\{ y_i \beta ^T  x_i + \log(1+ e^{\beta^T x_i} ) \}
+\end{align}
+
+And can be penalized (using a quadratic Ridge penalty) in the following way, \begin{align}
+    l(\beta) & = \sum_{i=1}^{n}\{ y_i \beta ^T  x_i + \log(1+ e^{\beta^T x_i} ) \} - \frac{\lambda}{2} \sum_{j=1}^m \beta^2_j
+\end{align}
+
+Where the complexity (Ridge) parameter $\lambda$ controls the size of the coefficients $\beta_j$. Thus, our objective is using general optimization techniques to provide a solution to the parameters $\beta_j$ and cross-validation to choice of the regularization parameter \cite{schimek}.
+
+We can solve the Ridge regression using a Newton-Raphson iterative procedure, at the time $t+1$ the $\beta$ estimates are updated as follows (Göksülük, 2011),
+
+```{=tex}
+\begin{align}
+\hat{\beta^{t+1}} = (X'WX)^{-1}X'W(X\hat{\beta^t} + W^{-1}(Y-\hat{\pi}))
+\end{align}
+```
+where,
+```{=tex}
+\begin{align}
+W &= diag(\hat{\pi}(i-\hat{\pi}))  \\
+\Lambda & = diag(\lambda)
+\end{align}
+```
+Note that for $\lambda=0$, it corresponds to the solution for a logistic model without penalization. The function $penalized.logit()$ was created to fit this logistic model, and we used the coefficients from the $glm$ function as the starting values for the betas.
 
 ### Bayesian methods
 
-
 ### Random Survival Forest
-
 
 # Software implementation
 
@@ -58,8 +130,7 @@ We write our package `jm5`. Here are the main functions:
 
 ```
 
-# Results 
-
+# Results
 
 ### Summary statistics for `diabetes` dataset
 
@@ -67,21 +138,92 @@ We write our package `jm5`. Here are the main functions:
 
 ```
 
+### Model fit for `diabetes` dataset - Penalized Ridge regression
 
-
-### Model fit for `diabetes` dataset - Penalized Ridge regression 
+Initially, we're constructing the design matrices X and x_test for training and testing purposes, respectively. These matrices includes various predictors such as age, gender, BMI, blood pressure (systolic and diastolic), height, triglyceride levels, liver enzymes (ALT and AST), blood urea nitrogen (BUN), creatinine clearance rate (CCR), cholesterol levels, as well as categorical variables indicating smoking, drinking, and medical history.
 
 ```{r, results = "hide"}
+X = x = scale(model.matrix(diabetes ~ Age + Gender + BMI + SBP + DBP + height + 
+                            Triglyceride + ALT + AST + BUN + CCR + Cholesterol +
+                            factor(smoke) + factor(drink) + factor(history), data = diabetes_train)[,-1])
+y = diabetes_train$diabetes
+x_test = scale(model.matrix(diabetes ~ Age + Gender + BMI + SBP + DBP + height + 
+                              Triglyceride + ALT + AST + BUN + CCR + Cholesterol +
+                              factor(smoke) + factor(drink) + factor(history), data = diabetes_test)[,-1])
+y_test = diabetes_test$diabetes
+```
+
+The following snippet of code is not evaluated in this report since it takes a while to run. In this case, we are going to use the lambda value ($\lambda = 0.013$) that we employed for the results in our presentation, which was obtained by using the same code below. The function $cv\_lambda$ estimates the minimal $\lambda$ value for the penalized ridge regression from the set of lambdas that enter as input and returns the one that minimizes the misclassification rate using 5-fold cross validation.
+
+```{r warning=FALSE, eval=FALSE}
+lambda_ <- seq(0.013, 0.0008, by = -0.0001)
+cv_lambda = cv.penalized.logit(X,y, n_folds = 5, lambda = lambda_)
+cv_lambda$se.1.lambda
+```
+
+Then we run the penalized logistic model, it gives us
+
+```{r}
+beta0 = glm(y~X, family = "binomial")$coefficients
+plogit.reg = penalized.logit(X,y, beta = beta0, lambda = 0.013) 
+output_betas <- as.data.frame(plogit.reg)
+colnames(output_betas) = c("Estimates")
+rownames(output_betas) = gsub("X", "", rownames(output_betas))
+knitr::kable(output_betas, caption = "Coefficients")
+```
+
+subsequently, we estimate the performance of the model,
+
+```{r}
+pred_plogit = ifelse(1/(1+exp(-cbind(1,x_test) %*%plogit.reg)) > mean(y),1,0)
+cMatrix_plogit = caret::confusionMatrix(as.factor(pred_plogit),as.factor(y_test)); print(cMatrix_plogit)
+```
+
+Note that we have a Sensitivity of 0.69689 and a specificity of 0.85448. Now, For comparison purposes, we utilize the glmnet package to fit the model, employing the optimal $\lambda$ values determined through the function $cv.glmnet()$. Subsequently, we contrast these results with the betas obtained from our solution. The following presents the outcome of this comparative analysis.
+
+```{r}
+## glmnet solution
+net.sol = glmnet(x = cbind(1,X), y = y, family = binomial(link="logit"),  alpha = 0, lambda = 0.0114)
+
+# Extract row names from the combined beta coefficients of net.sol and plogit.reg models
+df.rownames <- row.names(cbind(net.sol$beta, plogit.reg))
+# Rename the first row as "Intercept"
+df.rownames[1] <- "Intercept"
+
+# Create a data frame with Variable column using the extracted row names
+df <- data.frame(Variable = df.rownames)
+# Add glmnet coefficients to the df data frame
+df$glmnet <- as.numeric(net.sol$beta)
+# Add plogit.reg coefficients to the df data frame
+df$Penalized.Logit <- as.numeric(plogit.reg)
+
+# Reshape the data frame from wide to long format
+long_df <- pivot_longer(df, cols = -Variable, names_to = "Model", values_to = "Estimate") %>%
+  # Remove "Intercept" row
+  filter(Variable != "Intercept") %>%
+  # Arrange rows by absolute value of Estimate within each Model group
+  arrange(desc(abs(Estimate)), .by_group = factor("Model"))
+
+# Plot the coefficients using ggplot2
+ggplot(long_df, aes(x = reorder(Variable, -abs(Estimate)), y = Estimate, fill = Model)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = "Variable", y = "Estimate", color = "Model",
+        title = "Comparison of Ridge Regression Coefficients: glmnet vs. penalized.logit") +
+  # Customize fill colors for each Model
+  scale_fill_manual(values = c("glmnet" = "#7BAFD4", "Penalized.Logit" = "#13294B"))
+```
+
+Note that the betas are comparable between the two models. Additionally, the Body Mass Index (BMI) and age emerge as significant risk factors associated with diabetes. This finding aligns with research by Chen et al. (2018), which evaluates the importance of BMI and age in incident diabetes. Furthermore, elevated levels of Systolic and Diastolic Blood Pressure (SBP/DBP), Triglycerides, and Alanine Aminotransferase (ALA), along with a positive family history, correlate positively with diabetes incidence. Conversely, never having smoked, gender, and elevated Creatinine Clearance Rate (CCR) exhibit protective effects against diabetes development.
+
+### Model fit for `diabetes` dataset - Bayesian method
+
+```{r}
 
 ```
 
 It is time-consuming to run MCEM and each iteration takes more than 1 minute. Although the algorithm is hard to converge and we only run 10 iterations, the estimates are still similar with the estimates given by Bayesian method below.
-
-### Model fit for `diabetes` dataset - Bayesian method
-
-```{r warning=FALSE, results="hide"}
-
-```
 
 ### Random Forest for `diabetes` dataset
 
@@ -89,9 +231,7 @@ It is time-consuming to run MCEM and each iteration takes more than 1 minute. Al
 
 ```
 
-
 ### Cross-validation: AUC and F1 score for `diabetes` dataset
-
 
 ```{r}
 
@@ -99,27 +239,23 @@ It is time-consuming to run MCEM and each iteration takes more than 1 minute. Al
 
 # Discussion
 
-
-
 ## Main conclusion
-
 
 ## Limitations
 
 Below are some advantages and disadvantages of the three methods.
 
-### Penalized Ridge regression 
+### Penalized Ridge regression
 
-
+Unlike some other regularization methods like Lasso regression, which can shrink coefficients to zero and perform feature selection, ridge logistic regression retains all predictors in the model. Consequently, while ridge logistic regression improves model stability and reduces variance, it does not discard irrelevant variables
 
 ### Bayesian method
 
-
 ### RSF
-
 
 ## Future direction
 
+# References {-}
+- Chen, Y., Zhang, X. P., Yuan, J., Cai, B., Wang, X. L., Wu, X. L., ... & Li, X. Y. (2018). Association of body mass index and age with incident diabetes in Chinese adults: a population-based cohort study. *BMJ open*, 8(9), e021768.
 
-# References 
-
+- Göksülük, D. (2011). Penalized logistic regression. *Yüksek Lisans*.

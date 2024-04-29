@@ -30,15 +30,20 @@ The function iteratively updates the coefficients using a penalized
 logistic regression algorithm until convergence or maximum iterations are reached.
 }
 \examples{
-beta_true <- c(1.54, 3, 2.3)
-X <- matrix(rnorm(100), ncol = 2)
-linear_predictor <- cbind(1, X) \%*\% beta_true
-p <- exp(linear_predictor) / (1 + exp(linear_predictor))
-y <- rbinom(50, 1, prob = p)
-beta_initial <- rep(1, 3)
-lambda_values <- c(0.1, 0.01, 0.001)
+data("diabetes_train")
+predictors <- scale(model.matrix(diabetes ~ Age + Gender + BMI + SBP + DBP + height + 
+                        Triglyceride + ALT + AST + BUN + CCR + Cholesterol +
+                        factor(smoke) + factor(drink) + factor(history), data = diabetes_train)[,-1]
+response <- diabetes_train$diabetes
 
-# Run the penalized logistic regression function
-penalized.logit(X = X, y = y, beta = beta_initial, lambda = lambda_values)
+# We get the best lambda
+lambda_seq <- seq(0.013, 0.0008, by = -0.0001)
+cv_lambda <- cv.penalized.logit(predictors, response, n_folds = 5, lambda = lambda_seq)
+cv_lambda$se.1.lambda
+
+# Penalized logistic regression solution
+beta0 = glm(y~X, family = "binomial")$coefficients
+penalized_logit_result <- penalized.logit(predictors, response, beta = beta0, lambda = cv_lambda$se.1.lambda) 
+penalized_logit_result
 
 }
