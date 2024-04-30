@@ -3,30 +3,34 @@ library(devtools)
 library(caret)
 library(ranger)
 library(mlr)
+library(ROCR)
+library(MLeval)
 load_all("predict.bios735")
 set.seed(1)
 
 table(diabetes_train$diabetes)
 
-#Setup
-train_d <- subset(diabetes_train,select = -c(site,FPG_final,yr_f, weight, HDL,LDL))
-train_d$diabetes <- as.factor(train_d$diabetes)
-test_d <- subset(diabetes_test,select = -c(site,FPG_final,yr_f, weight, HDL,LDL))
-test_d$diabetes <- as.factor(test_d$diabetes)
+diabetes_train[,c("diabetes","smoke","drink","history","Gender")] <- 
+  lapply(diabetes_train[, c("diabetes","smoke","drink","history","Gender")], as.factor)
 
-library(ranger)
-library(caret)
+diabetes_test[,c("diabetes","smoke","drink","history","Gender")] <- 
+  lapply(diabetes_test[, c("diabetes","smoke","drink","history","Gender")], as.factor)
+
+#Setup
+train_d <- subset(diabetes_train,select = -c(site,FPG_final,yr_f, weight,HDL,LDL,FPG))
+
+test_d <- subset(diabetes_test,select = -c(site,FPG_final,yr_f, weight,HDL,LDL,FPG))
 
 fit.ranger = ranger(
   formula = diabetes ~ ., data = train_d,
+  class.weights = c(0.01956133,1),
   probability = TRUE,
-  class.weights = c(1,0.01956133),
-  importance = "impurity_corrected"
+  importance = "impurity",
 )
 
 # Make predictions on the test data
 predictions_ranger <- predict(fit.ranger, data = test_d)
-predicted_classes <- ifelse(predictions_ranger$predictions[,2]> 0.01956133, '1', '0')
+predicted_classes <- ifelse(predictions_ranger$predictions[,2]> 0.01956133, 1, 0)
 
 # Create a confusion matrix
 confusionMatrix(as.factor(predicted_classes), as.factor(test_d$diabetes),positive="1")
@@ -53,12 +57,12 @@ train_d2 <- train_d[idx.dat,]
 fit.ranger2 = ranger(
   formula = diabetes ~ ., data = train_d2,
   probability = TRUE,
-  importance = "impurity_corrected"
+  importance = "impurity"
 )
 
 # Make predictions on the test data
 predictions_ranger <- predict(fit.ranger2, data = test_d)
-predicted_classes <- ifelse(predictions_ranger$predictions[,2]> 0.5, '1', '0')
+predicted_classes <- ifelse(predictions_ranger$predictions[,2]> 0.5,'1' , '0')
 
 # Create a confusion matrix
 confusionMatrix(as.factor(predicted_classes), as.factor(test_d$diabetes),positive="1")

@@ -146,7 +146,15 @@ Note that for $\lambda=0$, it corresponds to the solution for a logistic model w
 
 ### Bayesian methods
 
-### Random Survival Forest
+### Random Forest
+
+The machine learning method chosen from Module 3 was Random Forest. Since the project data is heavily imbalanced and can lead to over-fitting in favor on the majority class when training a model, random forest was chosen because of its robustness against over-fitting. 
+
+A random forest is a collection of decision trees. In this case, each tree outputs a probability of diabetes. To build a tree, the data is bootstrapped and variables are randomly selected from the variables to construct a tree using out of bag error. Once these trees are constructed, they predict a probability, and this probability is averaged out to give a single probability of diabetes for an observation. This build process ensures model diversity and robustness against over-fitting.
+
+Random Forest have hyper-parameters that can be tuned to improve performance. Common ones include setting the amount of trees that are built, the number of variables to be randomly selected to build a tree, and the node size of the tree.
+
+In this project, two types of Random Forest is considered. The first is to create a 'weighted random forest' where the class weights are used to balance the data. The second method is to down-sample the majority class in the training set to equal the number of observations in the minority set. 
 
 # Software implementation
 
@@ -253,6 +261,45 @@ It is time-consuming to run MCEM and each iteration takes more than 1 minute. Al
 
 ### Random Forest for `diabetes` dataset
 
+First, run the Random Forest with class weights implemented as one of the hyper-parameters. The weight for majority class was the proportion of the minority class while the minority class had a weight of 1. The variable importance score was calculated using 'impurity'. 
+```{r}
+#Setup
+diabetes_train[,c("diabetes","smoke","drink","history","Gender")] <- 
+  lapply(diabetes_train[, c("diabetes","smoke","drink","history","Gender")], as.factor)
+diabetes_test[,c("diabetes","smoke","drink","history","Gender")] <- 
+  lapply(diabetes_test[, c("diabetes","smoke","drink","history","Gender")], as.factor)
+train_d <- subset(diabetes_train,select = -c(site,FPG_final,yr_f, weight,HDL,LDL,FPG))
+test_d <- subset(diabetes_test,select = -c(site,FPG_final,yr_f, weight,HDL,LDL,FPG))
+
+#Use ranger package because of faster computation time
+fit.ranger = ranger(
+  formula = diabetes ~ ., data = train_d,
+  class.weights = c(0.01956133,1),
+  probability = TRUE,
+  importance = "impurity",
+)
+# Make predictions on the test data
+predictions_ranger <- predict(fit.ranger, data = test_d)
+predicted_classes <- ifelse(predictions_ranger$predictions[,2]> 0.01956133, 1, 0)
+
+# Create a confusion matrix
+confusionMatrix(as.factor(predicted_classes), as.factor(test_d$diabetes),positive="1")
+```
+The model works well with a sensitivity of 0.85, which means it does a good job at detecting those with diabetes. A 0.7 specificity is a bit low and can lead to a fair amount of over-diagnoses of diabetes. Now check the variable importance to understand which variables have the most predictive power in building the tree.  
+```{r}
+# Sort the list by absolute values in descending order
+sorted_list <- fit.ranger$variable.importance[order(abs(fit.ranger$variable.importance), decreasing = FALSE)]
+
+# Create horizontal dot plot with adjusted margins
+par(mar = c(5, 7, 4, 2) + 0.1)  # Set margin
+plot(x = sorted_list, y = 1:length(sorted_list), pch = 20, xlim = c(min(sorted_list), max(sorted_list)),
+     xlab = "Importance", ylab = "", yaxt = "n", main = "Feature Importance")
+axis(2, at = 1:length(sorted_list), labels = names(sorted_list), las = 1)
+
+# Add value text next to each dot
+text(x = sorted_list, y = 1:length(sorted_list), labels = round(sorted_list, 2), pos = 4, xpd = TRUE)
+```
+Using the impurity importance metric, the plot shows lots of values have similar predictive values, with the top five being CCR, Triglyceride, BMI, BUN, and ALT. Next, look at down-sampling and its performance.
 ```{r}
 
 ```
