@@ -31,7 +31,7 @@ logistic regression algorithm until convergence or maximum iterations are reache
 }
 \examples{
 data("diabetes_train")
-predictors <- scale(model.matrix(diabetes ~ Age + Gender + BMI + SBP + DBP + height + 
+predictors <- scale(model.matrix(diabetes ~ Age + Gender + BMI + SBP + DBP + height +
                         Triglyceride + ALT + AST + BUN + CCR + Cholesterol +
                         factor(smoke) + factor(drink) + factor(history), data = diabetes_train)[,-1]
 response <- diabetes_train$diabetes
@@ -43,7 +43,7 @@ cv_lambda$se.1.lambda
 
 # Penalized logistic regression solution
 beta0 = glm(y~X, family = "binomial")$coefficients
-penalized_logit_result <- penalized.logit(predictors, response, beta = beta0, lambda = cv_lambda$se.1.lambda) 
+penalized_logit_result <- penalized.logit(predictors, response, beta = beta0, lambda = cv_lambda$se.1.lambda)
 penalized_logit_result
 
 }

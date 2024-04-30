@@ -1,9 +1,12 @@
 #' Logarithm of Normal Prior
-#' 
+#'
 #' This function computes the log of a normal density with mean 0 and
 #' standard deviation lambda. It uses a noninformative prior on the first
 #' parameter, assumed to be the intercept.
-#' 
+#'
+#' @import stats
+#' @import posterior
+#'
 #' @param beta a vector of numbers
 #' @param lambda the prior sd
 #'
@@ -13,9 +16,9 @@ log_pbeta <- function(beta, lambda) {
 }
 
 #' Logarithm of Half-Cauchy Prior
-#' 
+#'
 #' This function computes the logarithm of a standard half-Cauchy density.
-#' 
+#'
 #' @param lambda a number
 #'
 #' @return the logarithm of a standard half-Cauchy density at lambda
@@ -25,10 +28,10 @@ log_plambda <- function(lambda) {
 }
 
 #' Log-Likelihood for Logistic Regression
-#' 
+#'
 #' This function computes the log-likelihood at a given beta vector
 #' for a given response vector y and design matrix x.
-#' 
+#'
 #' @param y the vector of responses
 #' @param x the design matrix, including the intercept
 #' @param beta specified regression coefficients
@@ -43,7 +46,7 @@ log_likelihood <- function(y, x, beta) {
 #' This function computes the unnormalized log-posterior for logistic regression
 #' assuming a normal prior on the betas and a standard half-Cauchy prior on lambda,
 #' the standard deviation of the betas
-#' 
+#'
 #' @param y the vector of responses
 #' @param x the design matrix, including the intercept
 #' @param beta specified regression coefficients
@@ -59,10 +62,10 @@ log_posterior_unnormalized <- function(y, x, beta, lambda) {
 #' This function computes the estimated covariance matrix at a given iteration of
 #' the Metropolis-Hastings algorithm. A small diagonal matrix is added to ensure
 #' positive-definiteness
-#' 
+#'
 #' @param chain_mat the complete MCMC
 #' @param state the index of the row of the chain corresponding to the current iteration
-#' @param start the initial index of the chain matrix to compute the covariance 
+#' @param start the initial index of the chain matrix to compute the covariance
 #'
 #' @return the logarithm of a standard half-Cauchy density at lambda
 cov_state <- function(chain_mat, state, start) {
@@ -77,14 +80,14 @@ cov_state <- function(chain_mat, state, start) {
 
 #' Proposal Function for Metropolis Hastings Random Walk
 #'
-#' This function generates a beta based on the estimated covariance matrix of the current chain. 
-#' It also generates a lambda proposal by eith including it in the covariance 
-#' matrix or generating it independently. Finally, the function returns the 
+#' This function generates a beta based on the estimated covariance matrix of the current chain.
+#' It also generates a lambda proposal by eith including it in the covariance
+#' matrix or generating it independently. Finally, the function returns the
 #' concatenated c(beta, lambda) vector.
-#' 
+#'
 #' @param chain_mat the complete MCMC
 #' @param state the index of the row of the chain corresponding to the current iteration
-#' @param start the initial index of the chain matrix to compute the covariance 
+#' @param start the initial index of the chain matrix to compute the covariance
 #' @param lambda_adapt logical, include lambda in the adaptive proposal (TRUE) or generate independently (FALSE)
 #'
 #' @return a random draw from a multivariate normal density with covariance estimated from chain
@@ -96,7 +99,7 @@ proposal <- function(chain_mat, state, start, lambda_adapt = TRUE) {
   } else{
     beta_current <- chain_mat[state, 1:(ncol(chain_mat) - 1)]
     cov_prop <- cov_state(chain_mat[, 1:(ncol(chain_mat) - 1)], state, start)
-    
+
     beta_prop <- MASS::mvrnorm(1, beta_current, Sigma = cov_prop)
     lambda_prop <- MASS::mvrnorm(1, chain_mat[state, ncol(chain_mat)], Sigma = 1e-2)
     prop <- c(beta_prop, lambda_prop)
@@ -107,7 +110,7 @@ proposal <- function(chain_mat, state, start, lambda_adapt = TRUE) {
 #' Metropolis-Hastings Ratio
 #'
 #' This function computes the Metropolis-Hastings ratio
-#' 
+#'
 #' @param y the vector of responses
 #' @param x the design matrix, including the intercept
 #' @param log_posterior_curr the unnormalized current log posterior
@@ -126,7 +129,7 @@ R <- function(y, x, log_posterior_curr, log_posterior_prop) {
 #' algorithm for a logistic regression problem, assuming i.i.d N(0, lambda^2) priors
 #' on the regression coefficients conditional on lambda, and a standard half-Cauchy
 #' prior on lambda.
-#' 
+#'
 #' @param formula the formula to be used in the logistic regression model
 #' @param data the complete data including response and covariates
 #' @param chain_length the number of posterior draws to sample
@@ -142,20 +145,20 @@ R <- function(y, x, log_posterior_curr, log_posterior_prop) {
 #' \item{acceptance_rate}{The acceptance rate for the sampler}
 #' \item{design}{The design matrix}
 #' \item{design_std}{The standardized design matrix used for the sampler}
-#' 
+#'
 #' @export
-bayes.ridge.mcmc <- function(formula, data, chain_length = 60000, lambda_adapt = TRUE, 
+bayes.ridge.mcmc <- function(formula, data, chain_length = 60000, lambda_adapt = TRUE,
                              seed = NULL, beta_init = NULL, lambda_init = NULL,
                              trace = FALSE) {
   ## Get time for chain
   start.time <- Sys.time()
-  
+
   ## Design matrix
   x <- model.matrix(formula, data)
-  
+
   ## Save dimension of parameter vector
   dim <- ncol(x)
-  
+
   ## Standardized design matrix: normalize columns to have mean 0 and variance 1; leave intercept as is
   ## This gives intercept interpretation as probability of response given mean covariates
   x_std <- x
@@ -165,11 +168,11 @@ bayes.ridge.mcmc <- function(formula, data, chain_length = 60000, lambda_adapt =
     sd_x[j] <- sd(x[,j])
     x_std[,j] <- (x_std[,j] - mean(x_std[,j])) / sd_x[j]
   }
-  
+
   ## Obtain response vector
   formula.lhs <- as.character(formula[[2]])
   y <- data[[formula.lhs[1]]]
-  
+
   ## Initialize beta at MLEs
   if (is.null(beta_init)) {
     beta <- suppressWarnings(summary(glm(formula, data, family = "binomial"))$coefficients[,1])
@@ -177,66 +180,66 @@ bayes.ridge.mcmc <- function(formula, data, chain_length = 60000, lambda_adapt =
   } else{
     beta <- beta_init
   }
-  
+
   ## Choose initial value for lambda
   if (is.null(lambda_init)) {
     lambda <- 1
   } else {
     lambda <- lambda_init
   }
-  
+
   ## Initialize the chain matrix
   chain <- matrix(0, chain_length, length(beta) + 1)
   chain[1,] <- c(beta, lambda)
   colnames(chain) = c(colnames(x), "lambda")
-  
+
   ## Count the number of acceptances
   n.acc <- 0
-  
+
   ## Count number of negative lambda proposals
   n.lambda.neg <- 0
-  
+
   ## Get unnormalized posterior for initial parameters
   log_posterior_curr <- log_posterior_unnormalized(y, x_std, beta, lambda)
-  
+
   ## Start chain
   if (!is.null(seed)) {
     set.seed(seed)
   }
   for(i in 1:(chain_length-1)) {
-    
+
     ## Set the value at current iteration of the chain to variable xt
     curr <- chain[i,]
-    
+
     ## Use independent multivariate normal for first 100 iterations, then switch to adaptive
     if (i < 100) {
       prop <- MASS::mvrnorm(1, curr, Sigma = diag(c(rep(1e-3, dim), 1e-2)))
     } else {
       prop <- proposal(chain, i, max(90, i/2), lambda_adapt)
     }
-    
+
     ## Update n.lambda.neg
     if (prop[length(prop)] < 0) {
       n.lambda.neg <- n.lambda.neg + 1
     }
-    
+
     ## Calculate unnormalized log posterior of proposal
     log_posterior_prop <- log_posterior_unnormalized(y, x_std, prop[1:dim], prop[dim + 1])
-    
-    ## Calculate MH ratio 
+
+    ## Calculate MH ratio
     r <- R(y, x_std, log_posterior_curr, log_posterior_prop)
-    
+
     if (is.na(log_posterior_prop)) {
       print(unname(prop[1:dim]))
       print(unname(prop[dim + 1]))
       print(log_posterior_curr)
       print(r)
     }
-    
+
     ## Generate draw from bernoulli(p).
     keep <- rbinom(1, 1, r)
-    
-    ## If keep = 1, then set next iteration equal to then proposal, update n.acc, 
+
+    ## If keep = 1, then set next iteration equal to then proposal, update n.acc,
     ## and set current posterior to proposal posterior
     if (keep == 1){
       chain[i+1,] <- prop
@@ -281,10 +284,10 @@ bayes.ridge.mcmc <- function(formula, data, chain_length = 60000, lambda_adapt =
 #' Mode of a distribution
 #'
 #' This function computes the mode of a set of numbers by approximating the density
-#' 
-#' @param x the set of values with which to compute the mode
 #'
+#' @param x the set of values with which to compute the mode
+#' @param adjust bandwidth used for estimating the density
 #' @return the estimated mode
-Mode <- function(x, adjust = 0.5) {
+Mode <- function(x, adjust = 1) {
   density(x)$x[which.max(density(x, adjust = adjust)$y)]
 }

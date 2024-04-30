@@ -4,10 +4,12 @@
 \alias{Mode}
 \title{Mode of a distribution}
 \usage{
-Mode(x, adjust = 0.5)
+Mode(x, adjust = 1)
 }
 \arguments{
 \item{x}{the set of values with which to compute the mode}
+
+\item{adjust}{bandwidth used for estimating the density}
 }
 \value{
 the estimated mode
