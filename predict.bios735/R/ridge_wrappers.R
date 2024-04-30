@@ -252,26 +252,26 @@ bayes.ridge.mcmc <- function(formula, data, chain_length = 60000, lambda_adapt =
       }
     }
   }
-  
+
   ## Get unscaled parameter estimates
   chain_unscaled <- chain
   for (j in 2:dim) {
     chain_unscaled[,j] <- chain_unscaled[,j] / sd_x[j]
   }
-  
+
   ## Calculate acceptance rate
   acceptance_rate <- n.acc/chain_length
   acceptance_rate
-  
+
   ## Print final message
   end.time <- Sys.time()
   cat(paste0("Sample: ", chain_length, "/", chain_length, "    Acceptance rate: ", round(n.acc/i, 4), "\n",
              "Chain completed in ", round(difftime(time1 = end.time, time2 = start.time, units = "secs"), 2)
              , " seconds"))
-  
+
   ## Return objects
-  list("chain" = as_draws_df(as.data.frame(chain_unscaled)), 
-       "chain_std" = as_draws_df(as.data.frame(chain)), 
+  list("chain" = posterior::as_draws_df(as.data.frame(chain_unscaled)),
+       "chain_std" = posterior::as_draws_df(as.data.frame(chain)),
        "acceptance_rate" = acceptance_rate,
        "design" = x,
        "design_std" = x_std,
