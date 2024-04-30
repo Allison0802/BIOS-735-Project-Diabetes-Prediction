@@ -77,7 +77,6 @@ ggplot(melted_corr_mat, aes(x=Var1, y=Var2, fill=value)) +
 
 Based on the missing patterns and correlation, we removed HDL and LDL from our analysis because they are correlated with cholesterol and had more than 40% missingness. We also dropped weight variable because we believe that it can be fully represented by height and BMI combined.
 
-<<<<<<< HEAD
 ### Prepocessing 
 We split our data at a 80:20 ratio, adn then impuated the missing variables.
 ```{r}
@@ -103,11 +102,6 @@ use_data(diabetes_complete, overwrite = TRUE)
 ```
 
 # Methods 
-
-
-=======
-# Methods
->>>>>>> f77925d0d10cb3b5a1e5078c076be4c856c5c218
 
 ### Model specification
 
