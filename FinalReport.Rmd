@@ -31,7 +31,9 @@ This dataset comes from a Chinese cohort study conducted in 2016 with a median f
 
 (3). To compare predictive models based on penalized logistic regression, Bayesian-based penalized logistic regression models
 
-# Data overview
+# Data 
+
+### Overview
 
 Our data is highly unbalanced, with less than 2% of diabetes cases and more than 98% non-diabetes cases:
 
@@ -77,6 +79,30 @@ ggplot(melted_corr_mat, aes(x=Var1, y=Var2, fill=value)) +
 ```
 
 Based on the missing patterns and correlation, we removed HDL and LDL from our analysis because they are correlated with cholesterol and had more than 40% missingness. We also dropped weight variable because we believe that it can be fully represented by height and BMI combined.
+
+### Prepocessing 
+We split our data at a 80:20 ratio, adn then impuated the missing variables.
+```{r}
+library(mice)
+library(caret)
+data <- diabetes[, -1]
+# split the data
+set.seed(1349)
+train_index <- createDataPartition(data$diabetes, p = 0.8, list = FALSE)
+train_data <- data[train_index, ]
+test_data <- data[-train_index, ]
+
+# impute training set and test set
+diabetes_train <- mice(data = train_data, seed = 1349, print = FALSE, m = 1) |> complete()
+use_data(diabetes_train, overwrite = TRUE)
+
+diabetes_test <- mice(data = test_data, seed = 1349, print = FALSE, m = 1) |> complete()
+use_data(diabetes_test, overwrite = TRUE)
+
+diabetes_complete <- na.omit(data)
+use_data(diabetes_complete, overwrite = TRUE)
+
+```
 
 # Methods 
 
