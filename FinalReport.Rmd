@@ -38,7 +38,7 @@ This dataset comes from a Chinese cohort study conducted in 2016 with a median f
 
 Our data is highly unbalanced, with less than 2% of diabetes cases and more than 98% non-diabetes cases:
 
-```{r}
+```{r, message=FALSE, warning=FALSE}
 # library(devtools)
 # devtools::install("predict.bios735")
 library(predict.bios735)
@@ -106,20 +106,20 @@ use_data(diabetes_complete, overwrite = TRUE)
 # Methods 
 
 ### Model specification
+For our likelihood-based methods, we will use a logistic model, which relates the log odds of the probability of diabetes to the linear predictor as follows:
+$$\log\bigg(\frac{p_i}{1-p_i}\bigg) = x_i'\beta$$
 
 ### Likelihood
-The logistic model relates the log odds of the probability of diabetes to the linear predictor as follows:
-$$\log\bigg(\frac{p_i}{1-p_i}\bigg) = x_i'\beta$$
 Using a Bernoulli likelihood and replacing $p_i$ by substituting the logistic model gives
 $$L(\beta) = \prod_{i=1}^n p_i ^ {y_i} (1 - p_i)^{1-y_i} = \prod_{i=1}^n \bigg(\frac{e^{x_i'\beta}}{1 + e^{x_i'\beta}}\bigg) ^ {y_i} \bigg(\frac{1}{1 + e^{x_i'\beta}}\bigg)^{1-y_i}$$
 Finally, taking the logarithm and rearranging gives us the following log-likelihood:
 $$l(\beta) = \sum_{i=1}^n y_i x_i'\beta -\log\big(1 + e^{x_i'\beta}\big)$$
 
-# Details in methods
+## Details of Methods
 
-We used Ridge-penalized logistic regression, Bayesian methods, and Random Survival Forest to estimate parameters.
+We used Ridge-penalized logistic regression, a Bayesian approach, and Random Forest to estimate parameters.
 
-### Penalized Ridge logistic regression
+### Penalized Ridge Logistic Regression
 
 In order to mitigate the risk of over-fitting for diabetes prediction and select the most relevant risk factors, we opted for penalized logistic regression. This approach reduces the chances of over-fitting while controlling the complexity in the model.
 
@@ -152,7 +152,7 @@ W &= diag(\hat{\pi}(i-\hat{\pi}))  \\
 ```
 Note that for $\lambda=0$, it corresponds to the solution for a logistic model without penalization. The function $penalized.logit()$ was created to fit this logistic model, and we used the coefficients from the $glm$ function as the starting values for the betas.
 
-### Bayesian methods
+### Bayesian Approach
 We will employ the following prior, written here in hierarchical form:
 \begin{align*}
     \beta_0 &\sim N(0, 10^2) \\
@@ -504,3 +504,5 @@ Unlike some other regularization methods like Lasso regression, which can shrink
 - Chen, Y., Zhang, X. P., Yuan, J., Cai, B., Wang, X. L., Wu, X. L., ... & Li, X. Y. (2018). Association of body mass index and age with incident diabetes in Chinese adults: a population-based cohort study. *BMJ open*, 8(9), e021768.
 
 - Göksülük, D. (2011). Penalized logistic regression. *Yüksek Lisans*.
+
+- Heikki Haario, Eero Saksman, Johanna Tamminen "An adaptive Metropolis algorithm," Bernoulli, Bernoulli 7(2), 223-242, (April 2001)

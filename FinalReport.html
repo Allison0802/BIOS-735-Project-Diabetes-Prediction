@@ -1624,26 +1624,10 @@ regression, Bayesian-based penalized logistic regression models</p>
 and more than 98% non-diabetes cases:</p>
 <pre class="r"><code># library(devtools)
 # devtools::install(&quot;predict.bios735&quot;)
-library(predict.bios735)</code></pre>
-<pre><code>## Warning: replacing previous import &#39;posterior::var&#39; by &#39;stats::var&#39; when
-## loading &#39;predict.bios735&#39;</code></pre>
-<pre><code>## Warning: replacing previous import &#39;posterior::sd&#39; by &#39;stats::sd&#39; when loading
-## &#39;predict.bios735&#39;</code></pre>
-<pre><code>## Warning: replacing previous import &#39;posterior::mad&#39; by &#39;stats::mad&#39; when
-## loading &#39;predict.bios735&#39;</code></pre>
-<pre class="r"><code>library(tidyr)</code></pre>
-<pre><code>## Warning: package &#39;tidyr&#39; was built under R version 4.3.2</code></pre>
-<pre class="r"><code>library(tidyverse)</code></pre>
-<pre><code>## ── Attaching core tidyverse packages ──────────────────────── tidyverse 2.0.0 ──
-## ✔ dplyr     1.1.4     ✔ purrr     1.0.2
-## ✔ forcats   1.0.0     ✔ readr     2.1.5
-## ✔ ggplot2   3.4.4     ✔ stringr   1.5.1
-## ✔ lubridate 1.9.3     ✔ tibble    3.2.1
-## ── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
-## ✖ dplyr::filter() masks stats::filter()
-## ✖ dplyr::lag()    masks stats::lag()
-## ℹ Use the conflicted package (&lt;http://conflicted.r-lib.org/&gt;) to force all conflicts to become errors</code></pre>
-<pre class="r"><code>data &lt;- diabetes
+library(predict.bios735)
+library(tidyr)
+library(tidyverse)
+data &lt;- diabetes
 diabetes$Gender &lt;- factor(diabetes$Gender, level = c(1, 2), labels = c(&quot;Male&quot;, &quot;Female&quot;))
 diabetes$diabetes &lt;- factor(diabetes$diabetes, level = c(0, 1), labels = c(&quot;Non-diabetes&quot;, &quot;Diabetes&quot;))
 diabetes$history &lt;- factor(diabetes$history, level = c(0, 1), labels = c(&quot;N&quot;, &quot;Y&quot;))
@@ -2010,12 +1994,14 @@ use_data(diabetes_complete, overwrite = TRUE)</code></pre>
 <h1>Methods</h1>
 <div id="model-specification" class="section level3">
 <h3>Model specification</h3>
+<p>For our likelihood-based methods, we will use a logistic model, which
+relates the log odds of the probability of diabetes to the linear
+predictor as follows: <span class="math display">\[\log\bigg(\frac{p_i}{1-p_i}\bigg) =
+x_i&#39;\beta\]</span></p>
 </div>
 <div id="likelihood" class="section level3">
 <h3>Likelihood</h3>
-<p>The logistic model relates the log odds of the probability of
-diabetes to the linear predictor as follows: <span class="math display">\[\log\bigg(\frac{p_i}{1-p_i}\bigg) =
-x_i&#39;\beta\]</span> Using a Bernoulli likelihood and replacing <span class="math inline">\(p_i\)</span> by substituting the logistic model
+<p>Using a Bernoulli likelihood and replacing <span class="math inline">\(p_i\)</span> by substituting the logistic model
 gives <span class="math display">\[L(\beta) = \prod_{i=1}^n p_i ^ {y_i}
 (1 - p_i)^{1-y_i} = \prod_{i=1}^n \bigg(\frac{e^{x_i&#39;\beta}}{1 +
 e^{x_i&#39;\beta}}\bigg) ^ {y_i} \bigg(\frac{1}{1 +
@@ -2023,13 +2009,12 @@ e^{x_i&#39;\beta}}\bigg)^{1-y_i}\]</span> Finally, taking the logarithm
 and rearranging gives us the following log-likelihood: <span class="math display">\[l(\beta) = \sum_{i=1}^n y_i x_i&#39;\beta
 -\log\big(1 + e^{x_i&#39;\beta}\big)\]</span></p>
 </div>
-</div>
-<div id="details-in-methods" class="section level1">
-<h1>Details in methods</h1>
-<p>We used Ridge-penalized logistic regression, Bayesian methods, and
-Random Survival Forest to estimate parameters.</p>
+<div id="details-of-methods" class="section level2">
+<h2>Details of Methods</h2>
+<p>We used Ridge-penalized logistic regression, a Bayesian approach, and
+Random Forest to estimate parameters.</p>
 <div id="penalized-ridge-logistic-regression" class="section level3">
-<h3>Penalized Ridge logistic regression</h3>
+<h3>Penalized Ridge Logistic Regression</h3>
 <p>In order to mitigate the risk of over-fitting for diabetes prediction
 and select the most relevant risk factors, we opted for penalized
 logistic regression. This approach reduces the chances of over-fitting
@@ -2083,8 +2068,8 @@ created to fit this logistic model, and we used the coefficients from
 the <span class="math inline">\(glm\)</span> function as the starting
 values for the betas.</p>
 </div>
-<div id="bayesian-methods" class="section level3">
-<h3>Bayesian methods</h3>
+<div id="bayesian-approach" class="section level3">
+<h3>Bayesian Approach</h3>
 <p>We will employ the following prior, written here in hierarchical
 form: <span class="math display">\[\begin{align*}
     \beta_0 &amp;\sim N(0, 10^2) \\
@@ -2143,6 +2128,7 @@ is to create a ‘weighted random forest’ where the class weights are used
 to balance the data. The second method is to down-sample the majority
 class in the training set to equal the number of observations in the
 minority set.</p>
+</div>
 </div>
 </div>
 <div id="software-implementation" class="section level1">
@@ -2741,7 +2727,7 @@ fit.ranger = ranger(
   probability = TRUE,
   importance = &quot;impurity&quot;,
 )</code></pre>
-<pre><code>## Growing trees.. Progress: 73%. Estimated remaining time: 11 seconds.</code></pre>
+<pre><code>## Growing trees.. Progress: 63%. Estimated remaining time: 18 seconds.</code></pre>
 <pre class="r"><code># Make predictions on the test data
 predictions_ranger &lt;- predict(fit.ranger, data = test_d)
 predicted_classes &lt;- ifelse(predictions_ranger$predictions[,2]&gt; 0.01956133, 1, 0)
@@ -2837,6 +2823,9 @@ with incident diabetes in Chinese adults: a population-based cohort
 study. <em>BMJ open</em>, 8(9), e021768.</p></li>
 <li><p>Göksülük, D. (2011). Penalized logistic regression. <em>Yüksek
 Lisans</em>.</p></li>
+<li><p>Heikki Haario, Eero Saksman, Johanna Tamminen “An adaptive
+Metropolis algorithm,” Bernoulli, Bernoulli 7(2), 223-242, (April
+2001)</p></li>
 </ul>
 </div>
 
