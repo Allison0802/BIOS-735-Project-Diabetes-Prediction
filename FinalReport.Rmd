@@ -33,7 +33,7 @@ This dataset comes from a Chinese cohort study conducted in 2016 with a median f
 
 (2). To access the role of age and BMI in Type 2 diabetes
 
-(3). To compare predictive models based on penalized logistic regression, Bayesian-based penalized logistic regression models
+(3). To compare predictive models based on penalized logistic regression, Bayesian-based penalized logistic regression models, and Random Forest.
 
 # Data 
 
@@ -642,10 +642,11 @@ Below are some advantages and disadvantages of the three methods.
 
 ### Penalized Ridge regression
 
-Unlike some other regularization methods like Lasso regression, which can shrink coefficients to zero and perform feature selection, ridge logistic regression retains all predictors in the model. Consequently, while ridge logistic regression improves model stability and reduces variance, it does not discard irrelevant variables
+Unlike some other regularization methods like Lasso regression, which can shrink coefficients to zero and perform feature selection, ridge logistic regression retains all predictors in the model. Consequently, while ridge logistic regression improves model stability and reduces variance, it does not discard irrelevant variables.
 
 ### Bayesian method
 
+While the Bayesian method is appealing because it gives us credible intervals for the parameters and thus a sense of the variability about the estimates, there are several drawbacks. Firstly, it did not shrink the coefficients as strongly as ridge regression did, and this seemed to result in slightly lower predictive performance. Perhaps experimenting with different priors, such as a horseshoe prior, would result in better predictive performance. Secondly, it is very computationally intensive to sample from the posterior with the adaptive Metropolis-Hastings algorithm. This is because the dimension of the parameter matrix used to estimate the covariance is growing with every iteration. It also requires a large number of iterations to converge and to give us reliable inference.
 
 ### RF
 
