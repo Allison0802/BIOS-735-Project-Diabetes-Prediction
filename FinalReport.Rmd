@@ -108,6 +108,12 @@ use_data(diabetes_complete, overwrite = TRUE)
 ### Model specification
 
 ### Likelihood
+The logistic model relates the log odds of the probability of diabetes to the linear predictor as follows:
+$$\log\bigg(\frac{p_i}{1-p_i}\bigg) = x_i'\beta$$
+Using a Bernoulli likelihood and replacing $p_i$ by substituting the logistic model gives
+$$L(\beta) = \prod_{i=1}^n p_i ^ {y_i} (1 - p_i)^{1-y_i} = \prod_{i=1}^n \bigg(\frac{e^{x_i'\beta}}{1 + e^{x_i'\beta}}\bigg) ^ {y_i} \bigg(\frac{1}{1 + e^{x_i'\beta}}\bigg)^{1-y_i}$$
+Finally, taking the logarithm and rearranging gives us the following log-likelihood:
+$$l(\beta) = \sum_{i=1}^n y_i x_i'\beta -\log\big(1 + e^{x_i'\beta}\big)$$
 
 # Details in methods
 
@@ -147,7 +153,23 @@ W &= diag(\hat{\pi}(i-\hat{\pi}))  \\
 Note that for $\lambda=0$, it corresponds to the solution for a logistic model without penalization. The function $penalized.logit()$ was created to fit this logistic model, and we used the coefficients from the $glm$ function as the starting values for the betas.
 
 ### Bayesian methods
+We will employ the following prior, written here in hierarchical form:
+\begin{align*}
+    \beta_0 &\sim N(0, 10^2) \\
+    \beta_j | \lambda &\sim N(0, \lambda^2) \text{ for } j = 2, \ldots, p \\
+    \lambda &\sim \text{Half-Cauchy}(0, 1)
+\end{align*}
+We essentially use a normal distribution on the regression coefficients and treat the variance parameter as random. Using a standard Half-Cauchy density for the scale parameter in this shrinkage model has the appealing feature of placing a lot of prior mass at 0 but identifying large effects with a heavy tail. We leave the intercept unshrunk because we do not have reason to believe it should be 0. In fact in this case, with highly unbalanced data, the intercept will almost surely not be 0. Writing this prior out as an equation gives us
+$$\pi(\beta, \lambda) = \frac{1}{\sqrt{2\pi(10)^2}} e^{-\beta_0^2/2(10)^2}  \prod_{j=2}^p \frac{1}{\sqrt{2\pi\lambda^2}} e^{-\beta_j^2/2\lambda^2} \frac{2}{\pi(1 + \lambda^2)}$$
+The posterior is then
+$$p(\beta, \lambda | y) \propto L(\beta) \pi(\beta, \lambda),$$
+where $L(\beta)$ is the likelihood from before.
 
+We implement an Adaptive Metropolis Algorithm (Haario et. al., 2001). We initialize the intercept at $-4$, the rest of the regression coefficients at 0, and lambda at 1. We then draw a set of proposal parameters from the following distribution:
+$$(\beta, \lambda)_{(i)}^{\text{proposal}} \sim N\big((\beta, \lambda)_{(i)}^{\text{current}}, \Sigma_{(i)}^*\big)$$
+where
+$$\Sigma_{(i)}^* = \frac{2.4^2}{d}\big(\hat{\Sigma}_{(i)} + \varepsilon I_d \big)$$
+$\hat{\Sigma}_{(i)}$ is the estimated covariance matrix of the parameters at iteration $i$; this is the adaptive part of the sampler. The scaling term in front gives an optimal acceptance rate of about 0.25, and the last term with $\varepsilon$ is to ensure positive definiteness. We sample 70,000 posterior draws and use a burnin period of 20,000 iterations.
 
 ### Random Forest
 
@@ -218,7 +240,7 @@ cMatrix_plogit = caret::confusionMatrix(as.factor(pred_plogit),as.factor(y_test)
 
 Note that we have a Sensitivity of 0.69689 and a specificity of 0.85448. Now, For comparison purposes, we utilize the glmnet package to fit the model, employing the optimal $\lambda$ values determined through the function $cv.glmnet()$. Subsequently, we contrast these results with the betas obtained from our solution. The following presents the outcome of this comparative analysis.
 
-```{r}
+```{r, message=FALSE}
 library(glmnet)
 ## glmnet solution
 net.sol = glmnet(x = cbind(1,X), y = y, family = binomial(link="logit"),  alpha = 0, lambda = 0.0114)
@@ -406,10 +428,13 @@ We see from the forest plot that our estimates and credible intervals are consis
 ### Random Forest for `diabetes` dataset
 
 First, run the Random Forest with class weights implemented as one of the hyper-parameters. The weight for majority class was the proportion of the minority class while the minority class had a weight of 1. The variable importance score was calculated using 'impurity'. 
-```{r}
+
+```{r, message=FALSE}
 library(ranger)
 library(caret)
+```
 
+```{r}
 #Setup
 diabetes_train[,c("diabetes","smoke","drink","history","Gender")] <- 
   lapply(diabetes_train[, c("diabetes","smoke","drink","history","Gender")], as.factor)

@@ -2013,6 +2013,15 @@ use_data(diabetes_complete, overwrite = TRUE)</code></pre>
 </div>
 <div id="likelihood" class="section level3">
 <h3>Likelihood</h3>
+<p>The logistic model relates the log odds of the probability of
+diabetes to the linear predictor as follows: <span class="math display">\[\log\bigg(\frac{p_i}{1-p_i}\bigg) =
+x_i&#39;\beta\]</span> Using a Bernoulli likelihood and replacing <span class="math inline">\(p_i\)</span> by substituting the logistic model
+gives <span class="math display">\[L(\beta) = \prod_{i=1}^n p_i ^ {y_i}
+(1 - p_i)^{1-y_i} = \prod_{i=1}^n \bigg(\frac{e^{x_i&#39;\beta}}{1 +
+e^{x_i&#39;\beta}}\bigg) ^ {y_i} \bigg(\frac{1}{1 +
+e^{x_i&#39;\beta}}\bigg)^{1-y_i}\]</span> Finally, taking the logarithm
+and rearranging gives us the following log-likelihood: <span class="math display">\[l(\beta) = \sum_{i=1}^n y_i x_i&#39;\beta
+-\log\big(1 + e^{x_i&#39;\beta}\big)\]</span></p>
 </div>
 </div>
 <div id="details-in-methods" class="section level1">
@@ -2076,6 +2085,39 @@ values for the betas.</p>
 </div>
 <div id="bayesian-methods" class="section level3">
 <h3>Bayesian methods</h3>
+<p>We will employ the following prior, written here in hierarchical
+form: <span class="math display">\[\begin{align*}
+    \beta_0 &amp;\sim N(0, 10^2) \\
+    \beta_j | \lambda &amp;\sim N(0, \lambda^2) \text{ for } j = 2,
+\ldots, p \\
+    \lambda &amp;\sim \text{Half-Cauchy}(0, 1)
+\end{align*}\]</span> We essentially use a normal distribution on the
+regression coefficients and treat the variance parameter as random.
+Using a standard Half-Cauchy density for the scale parameter in this
+shrinkage model has the appealing feature of placing a lot of prior mass
+at 0 but identifying large effects with a heavy tail. We leave the
+intercept unshrunk because we do not have reason to believe it should be
+0. In fact in this case, with highly unbalanced data, the intercept will
+almost surely not be 0. Writing this prior out as an equation gives us
+<span class="math display">\[\pi(\beta, \lambda) =
+\frac{1}{\sqrt{2\pi(10)^2}} e^{-\beta_0^2/2(10)^2}  \prod_{j=2}^p
+\frac{1}{\sqrt{2\pi\lambda^2}} e^{-\beta_j^2/2\lambda^2} \frac{2}{\pi(1
++ \lambda^2)}\]</span> The posterior is then <span class="math display">\[p(\beta, \lambda | y) \propto L(\beta) \pi(\beta,
+\lambda),\]</span> where <span class="math inline">\(L(\beta)\)</span>
+is the likelihood from before.</p>
+<p>We implement an Adaptive Metropolis Algorithm (Haario et. al., 2001).
+We initialize the intercept at <span class="math inline">\(-4\)</span>,
+the rest of the regression coefficients at 0, and lambda at 1. We then
+draw a set of proposal parameters from the following distribution: <span class="math display">\[(\beta, \lambda)_{(i)}^{\text{proposal}} \sim
+N\big((\beta, \lambda)_{(i)}^{\text{current}},
+\Sigma_{(i)}^*\big)\]</span> where <span class="math display">\[\Sigma_{(i)}^* =
+\frac{2.4^2}{d}\big(\hat{\Sigma}_{(i)} + \varepsilon I_d \big)\]</span>
+<span class="math inline">\(\hat{\Sigma}_{(i)}\)</span> is the estimated
+covariance matrix of the parameters at iteration <span class="math inline">\(i\)</span>; this is the adaptive part of the
+sampler. The scaling term in front gives an optimal acceptance rate of
+about 0.25, and the last term with <span class="math inline">\(\varepsilon\)</span> is to ensure positive
+definiteness. We sample 70,000 posterior draws and use a burnin period
+of 20,000 iterations.</p>
 </div>
 <div id="random-forest" class="section level3">
 <h3>Random Forest</h3>
@@ -2268,15 +2310,8 @@ fit the model, employing the optimal <span class="math inline">\(\lambda\)</span
 function <span class="math inline">\(cv.glmnet()\)</span>. Subsequently,
 we contrast these results with the betas obtained from our solution. The
 following presents the outcome of this comparative analysis.</p>
-<pre class="r"><code>library(glmnet)</code></pre>
-<pre><code>## Loading required package: Matrix</code></pre>
-<pre><code>## 
-## Attaching package: &#39;Matrix&#39;</code></pre>
-<pre><code>## The following objects are masked from &#39;package:tidyr&#39;:
-## 
-##     expand, pack, unpack</code></pre>
-<pre><code>## Loaded glmnet 4.1-8</code></pre>
-<pre class="r"><code>## glmnet solution
+<pre class="r"><code>library(glmnet)
+## glmnet solution
 net.sol = glmnet(x = cbind(1,X), y = y, family = binomial(link=&quot;logit&quot;),  alpha = 0, lambda = 0.0114)
 
 # Extract row names from the combined beta coefficients of net.sol and plogit.reg models
@@ -2691,15 +2726,6 @@ of the minority class while the minority class had a weight of 1. The
 variable importance score was calculated using ‘impurity’.</p>
 <pre class="r"><code>library(ranger)
 library(caret)</code></pre>
-<pre><code>## Loading required package: lattice</code></pre>
-<pre><code>## 
-## Attaching package: &#39;caret&#39;</code></pre>
-<pre><code>## The following object is masked from &#39;package:svMisc&#39;:
-## 
-##     progress</code></pre>
-<pre><code>## The following object is masked from &#39;package:purrr&#39;:
-## 
-##     lift</code></pre>
 <pre class="r"><code>#Setup
 diabetes_train[,c(&quot;diabetes&quot;,&quot;smoke&quot;,&quot;drink&quot;,&quot;history&quot;,&quot;Gender&quot;)] &lt;- 
   lapply(diabetes_train[, c(&quot;diabetes&quot;,&quot;smoke&quot;,&quot;drink&quot;,&quot;history&quot;,&quot;Gender&quot;)], as.factor)
@@ -2715,7 +2741,7 @@ fit.ranger = ranger(
   probability = TRUE,
   importance = &quot;impurity&quot;,
 )</code></pre>
-<pre><code>## Growing trees.. Progress: 78%. Estimated remaining time: 8 seconds.</code></pre>
+<pre><code>## Growing trees.. Progress: 73%. Estimated remaining time: 11 seconds.</code></pre>
 <pre class="r"><code># Make predictions on the test data
 predictions_ranger &lt;- predict(fit.ranger, data = test_d)
 predicted_classes &lt;- ifelse(predictions_ranger$predictions[,2]&gt; 0.01956133, 1, 0)
