@@ -288,6 +288,8 @@ bayes.ridge.mcmc <- function(formula, data, chain_length = 60000, lambda_adapt =
 #' @param x the set of values with which to compute the mode
 #' @param adjust bandwidth used for estimating the density
 #' @return the estimated mode
+#'
+#' @export
 Mode <- function(x, adjust = 1) {
   density(x)$x[which.max(density(x, adjust = adjust)$y)]
 }
