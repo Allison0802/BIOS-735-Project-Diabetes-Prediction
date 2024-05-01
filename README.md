@@ -10,4 +10,4 @@ In this project, we aim to identify the risk factors for predicting Type 2 diabe
 
 Report [FinalReport.Rmd](FinalReport.Rmd) [FinalReport.html](FinalReport.html)
 
-Project package [predict.bios735](/predict.bios735)
+Project package [predict.bios735](/predict.bios735) [predict.bios735_0.0.0.9000.tar.gz](/predict.bios735_0.0.0.9000.tar.gz)
