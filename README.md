@@ -8,6 +8,6 @@ It contains the package `predict.bios735` developed by the team for conducting p
 
 In this project, we aim to identify the risk factors for predicting Type 2 diabetes and assess the role of BMI and age in Type 2 diabetes using data from a cohort study of Chinese adults.
 
-Report [FinalReport.Rmd](FinalReprt.Rmd) [FinalReport.html](FinalReport.html)
+Report [FinalReport.Rmd](FinalReport.Rmd) [FinalReport.html](FinalReport.html)
 
 Project package [predict.bios735](/predict.bios735)
