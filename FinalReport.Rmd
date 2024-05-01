@@ -317,6 +317,8 @@ mcmc_acf(chain, lags = 100)
 mcmc_hist(chain)
 ```
 
+Overall, the diagnostics look good. The chains seem to reach stationarity after the burnin period of 20,000 iterations.
+
 Summary:
 ```{r}
 summary <- summarize_draws(chain, "mean", "median", "sd",
@@ -399,7 +401,7 @@ res_cmnd %>% filter(labeltext != "(Intercept)") |>
   fp_set_zebra_style("#EFEFEF")
 ```
 
-It is time-consuming to run MCEM and each iteration takes more than 1 minute. Although the algorithm is hard to converge and we only run 10 iterations, the estimates are still similar with the estimates given by Bayesian method below.
+We see from the forest plot that our estimates and credible intervals are consistent with those from the Stan fit. This is reassuring, since Stan implements a more sophisticated MCMC algorithm called Hamiltonian Monte Carlo and generally produces reliable inference results. Since these are standardized estimates, we can compare their magnitude, and we see that Age and BMI are the strongest predictors of diabetes. The ridge regression implemented by Glmnet shrinks more strongly to 0, but the relative magnitudes of the coefficients seem to be consistent between the Glmnet and the Bayesian implementation.
 
 ### Random Forest for `diabetes` dataset
 
