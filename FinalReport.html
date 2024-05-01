@@ -2133,8 +2133,27 @@ minority set.</p>
 </div>
 <div id="software-implementation" class="section level1">
 <h1>Software implementation</h1>
-<p>We write our package <code>jm5</code>. Here are the main
-functions:</p>
+<p>We write our package <code>predict.bios735</code>. Here are the main
+functions.</p>
+<p>To obtain the ridge estimates using ridge penalty <span class="math inline">\(\lambda\)</span>, we have implemented the
+following function:</p>
+<pre class="r"><code>penalized.logit(X, y, beta, lambda, iter = 1000, tol = 1e-04)</code></pre>
+<p>Note that the first argument <code>X</code> should be the
+<em>standardized</em> design matrix. See example in documentation for
+details on how to use.</p>
+<p>To sample from the posterior of the Bayesian model using the adaptive
+Metropolis-Hastings algorithm outlined above, we have implemented the
+following function:</p>
+<pre class="r"><code>bayes.ridge.mcmc(formula, data, chain_length = 60000, lambda_adapt = TRUE,
+                 seed = NULL, beta_init = NULL, lambda_init = NULL,
+                 trace = FALSE)</code></pre>
+<p>It is similar to the <code>glm</code> function in R in its use. See
+documentation for complete details. Note that the data frame provided to
+the <code>data</code> argument need not be scaled; the function
+standardizes the design matrix itself. Note that if no initialization is
+provided for the regression coefficients, i.e., the user does not
+specify <code>beta_init</code>, the sampler will initialize at the GLM
+estimates.</p>
 </div>
 <div id="results" class="section level1">
 <h1>Results</h1>
@@ -2727,7 +2746,7 @@ fit.ranger = ranger(
   probability = TRUE,
   importance = &quot;impurity&quot;,
 )</code></pre>
-<pre><code>## Growing trees.. Progress: 63%. Estimated remaining time: 18 seconds.</code></pre>
+<pre><code>## Growing trees.. Progress: 89%. Estimated remaining time: 3 seconds.</code></pre>
 <pre class="r"><code># Make predictions on the test data
 predictions_ranger &lt;- predict(fit.ranger, data = test_d)
 predicted_classes &lt;- ifelse(predictions_ranger$predictions[,2]&gt; 0.01956133, 1, 0)
