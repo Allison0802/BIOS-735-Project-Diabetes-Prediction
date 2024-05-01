@@ -183,11 +183,21 @@ In this project, two types of Random Forest is considered. The first is to creat
 
 # Software implementation
 
-We write our package `jm5`. Here are the main functions:
+We write our package `predict.bios735`. Here are the main functions.
 
+To obtain the ridge estimates using ridge penalty $\lambda$, we have implemented the following function:
 ```{r eval=FALSE}
-
+penalized.logit(X, y, beta, lambda, iter = 1000, tol = 1e-04)
 ```
+Note that the first argument `X` should be the *standardized* design matrix. See example in documentation for details on how to use.
+
+To sample from the posterior of the Bayesian model using the adaptive Metropolis-Hastings algorithm outlined above, we have implemented the following function:
+```{r eval=FALSE}
+bayes.ridge.mcmc(formula, data, chain_length = 60000, lambda_adapt = TRUE,
+                 seed = NULL, beta_init = NULL, lambda_init = NULL,
+                 trace = FALSE)
+```
+It is similar to the `glm` function in R in its use. See documentation for complete details. Note that the data frame provided to the `data` argument need not be scaled; the function standardizes the design matrix itself. Note that if no initialization is provided for the regression coefficients, i.e., the user does not specify `beta_init`, the sampler will initialize at the GLM estimates.
 
 # Results
 
