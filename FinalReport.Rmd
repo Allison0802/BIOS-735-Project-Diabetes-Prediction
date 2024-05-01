@@ -158,19 +158,14 @@ In this project, two types of Random Forest is considered. The first is to creat
 
 # Software implementation
 
-We write our package `jm5`. Here are the main functions:
+We write our package `predict.bios735`. It includes the functions for performing ridge penalized logistic regression using Newton-Raphson and a bayesian method. Here are the main functions:
 
 ```{r eval=FALSE}
+
 
 ```
 
 # Results
-
-### Summary statistics for `diabetes` dataset
-
-```{r echo=FALSE}
-
-```
 
 ### Model fit for `diabetes` dataset - Penalized Ridge regression
 
@@ -257,11 +252,10 @@ Note that the betas are comparable between the two models. Additionally, the Bod
 
 ```
 
-It is time-consuming to run MCEM and each iteration takes more than 1 minute. Although the algorithm is hard to converge and we only run 10 iterations, the estimates are still similar with the estimates given by Bayesian method below.
-
 ### Random Forest for `diabetes` dataset
 
 First, run the Random Forest with class weights implemented as one of the hyper-parameters. The weight for majority class was the proportion of the minority class while the minority class had a weight of 1. The variable importance score was calculated using 'impurity'. 
+
 ```{r}
 #Setup
 diabetes_train[,c("diabetes","smoke","drink","history","Gender")] <- 
