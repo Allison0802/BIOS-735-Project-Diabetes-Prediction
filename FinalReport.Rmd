@@ -1,0 +1,659 @@
+---
+title: "BIOS735 Final Project Report"
+author: "Group 5: Anil Anderson, Arthi Hariharan, David Hu, Álvaro Quijano, Yumei Yang"
+date: "5/1/2024"
+output:
+  html_document:
+    toc: true
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE)
+```
+# Introduction
+
+The global prevalence of diabetes is rapidly increasing, with projections suggesting that by 2045, 783 million people will be living with diabetes. Type 2 Diabetes, in particular, is a major cause of severe health complications such as blindness, kidney failure, heart attacks, stroke, and lower limb amputation.
+
+Early diagnosis is crucial for mitigating the effects of diabetes. And a predictive model is an indispensable tool for timely interventions and efficient allocation of.
+
+Obesity is known to be positively associated with diabetes, while young age is often thought to be a protective factor against it. However, research also shows that prevalence of diabetes in people under 40 years old has been increasing. It is unclear whether there is an association between diabetes and body mass index (BMI), and how this might be impacted by age.
+
+In this project, we aim to identify the risk factors for predicting Type 2 diabetes and assess the role of BMI and age in Type 2 diabetes using data from a cohort study of Chinese adults.
+
+## Dataset
+
+This dataset comes from a Chinese cohort study conducted in 2016 with a median follow-up time of 3.1 years. Participants were free of diabetes at baseline and a total of 4174 participants have developed diabetes by the end of the study.
+
+## Project Objectives
+
+(1). To identify the risk factors for Type 2 diabetes
+
+(2). To access the role of age and BMI in Type 2 diabetes
+
+(3). To compare predictive models based on penalized logistic regression, Bayesian-based penalized logistic regression models
+
+# Data 
+
+### Overview
+
+Our data is highly unbalanced, with less than 2% of diabetes cases and more than 98% non-diabetes cases:
+
+```{r, message=FALSE, warning=FALSE}
+library(devtools)
+devtools::install("predict.bios735")
+library(predict.bios735)
+library(tidyr)
+library(tidyverse)
+data <- diabetes
+diabetes$Gender <- factor(diabetes$Gender, level = c(1, 2), labels = c("Male", "Female"))
+diabetes$diabetes <- factor(diabetes$diabetes, level = c(0, 1), labels = c("Non-diabetes", "Diabetes"))
+diabetes$history <- factor(diabetes$history, level = c(0, 1), labels = c("N", "Y"))
+
+# descriptive stats
+table1::table1(~ Age + Gender + height + weight + BMI + SBP + DBP + Cholesterol 
+               + Triglyceride + HDL + LDL + AST + BUN + CCR + smoke + drink + 
+                 history | diabetes, data = diabetes, render.continuous=c(.="Mean (SD)"))
+```
+
+LDL, HDL, AST, smoking status, and drinking status have more than 40% missingness, and interestingly, missingness of LDL-HDL, smoking-drinkingalmost always occurred simultaneously. Since the data was pulled from a medical record databse, we assumed that those variables were missing completely at random (MCAR) and imputated the missing values for out further analysis.
+
+```{r}
+# missing patterns
+diabetes |>
+  select(HDL, LDL, AST, smoke, drink) |>
+  naniar::gg_miss_upset()
+```
+
+Unsurprisingly, we found the following sets of highly correlated variables: - weight and height/BMI - gender and CRR/height/weight - cholesterol and LDL - AST and ALT
+
+```{r}
+# correlation heatmap
+corr_mat <- round(cor(select(data, -c(id, diabetes, FPG, FPG_final)), use = "complete.obs"),2)
+melted_corr_mat <- reshape2::melt(corr_mat)
+
+ggplot(melted_corr_mat, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile() +
+  scale_fill_gradient(low = "#FFDD95", high = "#4c9cd3", guide = "colorbar") +
+  labs(x = "", y = "")
+```
+
+Based on the missing patterns and correlation, we removed HDL and LDL from our analysis because they are correlated with cholesterol and had more than 40% missingness. We also dropped weight variable because we believe that it can be fully represented by height and BMI combined.
+
+### Prepocessing 
+We split our data at a 80:20 ratio, and then imputed the missing variables.
+```{r, eval=FALSE}
+library(mice)
+library(caret)
+library(usethis)
+data <- diabetes[, -1]
+# split the data
+set.seed(1349)
+train_index <- createDataPartition(data$diabetes, p = 0.8, list = FALSE)
+train_data <- data[train_index, ]
+test_data <- data[-train_index, ]
+
+# impute training set and test set
+diabetes_train <- mice(data = train_data, seed = 1349, print = FALSE, m = 1) |> complete()
+use_data(diabetes_train, overwrite = TRUE)
+
+diabetes_test <- mice(data = test_data, seed = 1349, print = FALSE, m = 1) |> complete()
+use_data(diabetes_test, overwrite = TRUE)
+
+diabetes_complete <- na.omit(data)
+use_data(diabetes_complete, overwrite = TRUE)
+```
+
+# Methods 
+
+### Model specification
+For our likelihood-based methods, we will use a logistic model, which relates the log odds of the probability of diabetes to the linear predictor as follows:
+$$\log\bigg(\frac{p_i}{1-p_i}\bigg) = x_i'\beta$$
+
+### Likelihood
+Using a Bernoulli likelihood and replacing $p_i$ by substituting the logistic model gives
+$$L(\beta) = \prod_{i=1}^n p_i ^ {y_i} (1 - p_i)^{1-y_i} = \prod_{i=1}^n \bigg(\frac{e^{x_i'\beta}}{1 + e^{x_i'\beta}}\bigg) ^ {y_i} \bigg(\frac{1}{1 + e^{x_i'\beta}}\bigg)^{1-y_i}$$
+Finally, taking the logarithm and rearranging gives us the following log-likelihood:
+$$l(\beta) = \sum_{i=1}^n y_i x_i'\beta -\log\big(1 + e^{x_i'\beta}\big)$$
+
+## Details of Methods
+
+We used Ridge-penalized logistic regression, a Bayesian approach, and Random Forest to estimate parameters.
+
+### Penalized Ridge Logistic Regression
+
+In order to mitigate the risk of over-fitting for diabetes prediction and select the most relevant risk factors, we opted for penalized logistic regression. This approach reduces the chances of over-fitting while controlling the complexity in the model.
+
+Let $x_{ij}$ denote the observed data, where $i$ corresponds to patients and $j$ corresponds to the independent variables such as age, gender, Body Mass Index (BMI), total cholesterol (Chol), triglyceride levels (TG), creatinine (Cr), and others, with $i = 1, \ldots, n$, and $j$ the number of predictors. Let $y_i$ represent the binary outcome for observation $i$, indicating the presence or absence of diabetes. Our goal is to classify observations based on the binary outcome $y_i$, considering the covariates represented by $X$ and identifying the risk factors associated to diabetes.
+
+The log-likelihood for the model can be written as, \begin{align}
+    l(\beta) & = \sum_{i=1}^{n} \{y_i \log(\pi(x_{i};\beta)) \}  + (1-y_i) \log(1-\pi(x_{i},\beta))\}\\
+    & = \sum_{i=1}^{n}\{ y_i \beta ^T  x_i + \log(1+ e^{\beta^T x_i} ) \}
+\end{align}
+
+And can be penalized (using a quadratic Ridge penalty) in the following way, \begin{align}
+    l(\beta) & = \sum_{i=1}^{n}\{ y_i \beta ^T  x_i + \log(1+ e^{\beta^T x_i} ) \} - \frac{\lambda}{2} \sum_{j=1}^m \beta^2_j
+\end{align}
+
+Where the complexity (Ridge) parameter $\lambda$ controls the size of the coefficients $\beta_j$. Thus, our objective is using general optimization techniques to provide a solution to the parameters $\beta_j$ and cross-validation to choice of the regularization parameter \cite{schimek}.
+
+We can solve the Ridge regression using a Newton-Raphson iterative procedure, at the time $t+1$ the $\beta$ estimates are updated as follows (Göksülük, 2011),
+
+```{=tex}
+\begin{align}
+\hat{\beta^{t+1}} = (X'WX)^{-1}X'W(X\hat{\beta^t} + W^{-1}(Y-\hat{\pi}))
+\end{align}
+```
+where,
+```{=tex}
+\begin{align}
+W &= diag(\hat{\pi}(i-\hat{\pi}))  \\
+\Lambda & = diag(\lambda)
+\end{align}
+```
+Note that for $\lambda=0$, it corresponds to the solution for a logistic model without penalization. The function $penalized.logit()$ was created to fit this logistic model, and we used the coefficients from the $glm$ function as the starting values for the betas.
+
+### Bayesian Approach
+We will employ the following prior, written here in hierarchical form:
+\begin{align*}
+    \beta_0 &\sim N(0, 10^2) \\
+    \beta_j | \lambda &\sim N(0, \lambda^2) \text{ for } j = 2, \ldots, p \\
+    \lambda &\sim \text{Half-Cauchy}(0, 1)
+\end{align*}
+We essentially use a normal distribution on the regression coefficients and treat the variance parameter as random. Using a standard Half-Cauchy density for the scale parameter in this shrinkage model has the appealing feature of placing a lot of prior mass at 0 but identifying large effects with a heavy tail. We leave the intercept unshrunk because we do not have reason to believe it should be 0. In fact in this case, with highly unbalanced data, the intercept will almost surely not be 0. Writing this prior out as an equation gives us
+$$\pi(\beta, \lambda) = \frac{1}{\sqrt{2\pi(10)^2}} e^{-\beta_0^2/2(10)^2}  \prod_{j=2}^p \frac{1}{\sqrt{2\pi\lambda^2}} e^{-\beta_j^2/2\lambda^2} \frac{2}{\pi(1 + \lambda^2)}$$
+The posterior is then
+$$p(\beta, \lambda | y) \propto L(\beta) \pi(\beta, \lambda),$$
+where $L(\beta)$ is the likelihood from before.
+
+We implement an Adaptive Metropolis Algorithm (Haario et. al., 2001). We initialize the intercept at $-4$, the rest of the regression coefficients at 0, and lambda at 1. We then draw a set of proposal parameters from the following distribution:
+$$(\beta, \lambda)_{(i)}^{\text{proposal}} \sim N\big((\beta, \lambda)_{(i)}^{\text{current}}, \Sigma_{(i)}^*\big)$$
+where
+$$\Sigma_{(i)}^* = \frac{2.4^2}{d}\big(\hat{\Sigma}_{(i)} + \varepsilon I_d \big)$$
+$\hat{\Sigma}_{(i)}$ is the estimated covariance matrix of the parameters at iteration $i$; this is the adaptive part of the sampler. The scaling term in front gives an optimal acceptance rate of about 0.25, and the last term with $\varepsilon$ is to ensure positive definiteness. We sample 70,000 posterior draws and use a burnin period of 20,000 iterations.
+
+### Random Forest
+
+The machine learning method chosen from Module 3 was Random Forest. Since the project data is heavily imbalanced and can lead to over-fitting in favor on the majority class when training a model, random forest was chosen because of its robustness against over-fitting. 
+
+A random forest is a collection of decision trees. In this case, each tree outputs a probability of diabetes. To build a tree, the data is bootstrapped and variables are randomly selected from the variables to construct a tree using out of bag error. Once these trees are constructed, they predict a probability, and this probability is averaged out to give a single probability of diabetes for an observation. This build process ensures model diversity and robustness against over-fitting.
+
+Random Forest have hyper-parameters that can be tuned to improve performance. Common ones include setting the amount of trees that are built, the number of variables to be randomly selected to build a tree, and the node size of the tree.
+
+In this project, two types of Random Forest is considered. The first is to create a 'weighted random forest' where the class weights are used to balance the data. The second method is to down-sample the majority class in the training set to equal the number of observations in the minority set. 
+
+# Software implementation
+
+We write our package `predict.bios735`. Here are the main functions.
+
+To obtain the ridge estimates using ridge penalty $\lambda$, we have implemented the following function:
+```{r eval=FALSE}
+penalized.logit(X, y, beta, lambda, iter = 1000, tol = 1e-04)
+```
+Note that the first argument `X` should be the *standardized* design matrix. See example in documentation for details on how to use.
+
+To sample from the posterior of the Bayesian model using the adaptive Metropolis-Hastings algorithm outlined above, we have implemented the following function:
+```{r eval=FALSE}
+bayes.ridge.mcmc(formula, data, chain_length = 60000, lambda_adapt = TRUE,
+                 seed = NULL, beta_init = NULL, lambda_init = NULL,
+                 trace = FALSE)
+```
+It is similar to the `glm` function in R in its use. See documentation for complete details. Note that the data frame provided to the `data` argument need not be scaled; the function standardizes the design matrix itself. Note that if no initialization is provided for the regression coefficients, i.e., the user does not specify `beta_init`, the sampler will initialize at the GLM estimates.
+
+# Results
+
+### Model fit for `diabetes` dataset - Penalized Ridge regression
+
+Initially, we're constructing the design matrices X and x_test for training and testing purposes, respectively. These matrices includes various predictors such as age, gender, BMI, blood pressure (systolic and diastolic), height, triglyceride levels, liver enzymes (ALT and AST), blood urea nitrogen (BUN), creatinine clearance rate (CCR), cholesterol levels, as well as categorical variables indicating smoking, drinking, and medical history.
+
+```{r, results = "hide"}
+X = x = scale(model.matrix(diabetes ~ Age + Gender + BMI + SBP + DBP + height + 
+                            Triglyceride + ALT + AST + BUN + CCR + Cholesterol +
+                            factor(smoke) + factor(drink) + factor(history), data = diabetes_train)[,-1])
+y = diabetes_train$diabetes
+x_test = scale(model.matrix(diabetes ~ Age + Gender + BMI + SBP + DBP + height + 
+                              Triglyceride + ALT + AST + BUN + CCR + Cholesterol +
+                              factor(smoke) + factor(drink) + factor(history), data = diabetes_test)[,-1])
+y_test = diabetes_test$diabetes
+```
+
+The following snippet of code is not evaluated in this report since it takes a while to run. In this case, we are going to use the lambda value ($\lambda = 0.013$) that we employed for the results in our presentation, which was obtained by using the same code below. The function $cv\_lambda$ estimates the minimal $\lambda$ value for the penalized ridge regression from the set of lambdas that enter as input and returns the one that minimizes the misclassification rate using 5-fold cross validation.
+
+```{r warning=FALSE, eval=FALSE}
+lambda_ <- seq(0.013, 0.0008, by = -0.0001)
+cv_lambda = cv.penalized.logit(X,y, n_folds = 5, lambda = lambda_)
+cv_lambda$se.1.lambda
+```
+
+Then we run the penalized logistic model, it gives us
+
+```{r}
+beta0 = glm(y~X, family = "binomial")$coefficients
+plogit.reg = penalized.logit(X,y, beta = beta0, lambda = 0.013) 
+output_betas <- as.data.frame(plogit.reg)
+colnames(output_betas) = c("Estimates")
+rownames(output_betas) = gsub("X", "", rownames(output_betas))
+knitr::kable(output_betas, caption = "Coefficients")
+```
+
+subsequently, we estimate the performance of the model,
+
+```{r}
+predictions_plogit = 1/(1+exp(-cbind(1,x_test) %*%plogit.reg))
+pred_plogit = ifelse(1/(1+exp(-cbind(1,x_test) %*%plogit.reg)) > mean(y),1,0)
+cMatrix_plogit = caret::confusionMatrix(as.factor(pred_plogit),as.factor(y_test),positive = "1"); print(cMatrix_plogit)
+```
+
+Note that we have a Sensitivity of 0.69689 and a specificity of 0.85448. Now, For comparison purposes, we utilize the glmnet package to fit the model, employing the optimal $\lambda$ values determined through the function $cv.glmnet()$. Subsequently, we contrast these results with the betas obtained from our solution. The following presents the outcome of this comparative analysis.
+
+```{r, message=FALSE}
+library(glmnet)
+## glmnet solution
+net.sol = glmnet(x = cbind(1,X), y = y, family = binomial(link="logit"),  alpha = 0, lambda = 0.0114)
+
+# Extract row names from the combined beta coefficients of net.sol and plogit.reg models
+df.rownames <- row.names(cbind(net.sol$beta, plogit.reg))
+# Rename the first row as "Intercept"
+df.rownames[1] <- "Intercept"
+
+# Create a data frame with Variable column using the extracted row names
+df <- data.frame(Variable = df.rownames)
+# Add glmnet coefficients to the df data frame
+df$glmnet <- as.numeric(net.sol$beta)
+# Add plogit.reg coefficients to the df data frame
+df$Penalized.Logit <- as.numeric(plogit.reg)
+
+# Reshape the data frame from wide to long format
+long_df <- pivot_longer(df, cols = -Variable, names_to = "Model", values_to = "Estimate") %>%
+  # Remove "Intercept" row
+  filter(Variable != "Intercept") %>%
+  # Arrange rows by absolute value of Estimate within each Model group
+  arrange(desc(abs(Estimate)), .by_group = factor("Model"))
+
+# Plot the coefficients using ggplot2
+ggplot(long_df, aes(x = reorder(Variable, -abs(Estimate)), y = Estimate, fill = Model)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = "Variable", y = "Estimate", color = "Model",
+        title = "Comparison of Ridge Regression Coefficients: glmnet vs. penalized.logit") +
+  # Customize fill colors for each Model
+  scale_fill_manual(values = c("glmnet" = "#7BAFD4", "Penalized.Logit" = "#13294B"))
+```
+
+Note that the betas are comparable between the two models. Additionally, the Body Mass Index (BMI) and age emerge as significant risk factors associated with diabetes. This finding aligns with research by Chen et al. (2018), which evaluates the importance of BMI and age in incident diabetes. Furthermore, elevated levels of Systolic and Diastolic Blood Pressure (SBP/DBP), Triglycerides, and Alanine Aminotransferase (ALA), along with a positive family history, correlate positively with diabetes incidence. Conversely, never having smoked, gender, and elevated Creatinine Clearance Rate (CCR) exhibit protective effects against diabetes development.
+
+### Model fit for `diabetes` dataset - Bayesian method
+Load libraries:
+```{r, warning=FALSE, message=FALSE}
+library(dplyr)
+library(posterior)
+library(bayesplot)
+color_scheme_set("brightblue")
+library(coda)
+library(glmnet)
+library(forestplot)
+library(svMisc)
+library(knitr)
+```
+
+Read in dataset:
+```{r}
+train <- diabetes_train
+train$smoke <- as.factor(train$smoke)
+train$drink <- as.factor(train$drink)
+train$history <- as.factor(train$history)
+train$Gender <- as.factor(train$Gender)
+```
+
+Sample 30,000 rows from dataset for computational feasibility:
+```{r}
+set.seed(458)
+diabetes <- sample_n(train, 30000)
+```
+
+Set formula:
+```{r}
+fmla <- formula(diabetes ~ . - site - yr_f - FPG - FPG_final - weight - HDL - LDL - Gender + as.factor(Gender))
+```
+
+Run sampler and track time:
+```{r, eval=FALSE}
+chain.mcmc <- bayes.ridge.mcmc(fmla, data = diabetes,
+                               chain_length = 70000, seed = 123,
+                               beta_init = c(-4, rep(0, 17)), lambda_init = 1,
+                               trace = TRUE)
+```
+
+Since the above code takes a long time to run, read in pre-run chain 70,000 iterations long that has converged:
+```{r}
+chain.mcmc <- readRDS("Bayesian/chain.Rds")
+```
+
+Trace plots:
+```{r}
+burnin <-  20000 # nrow(chain.mcmc$chain_std)/2
+mcmc_trace(chain.mcmc$chain_std, n_warmup = burnin)
+mcmc_trace(chain.mcmc$chain_std, n_warmup = burnin, pars = "lambda")
+```
+
+Trace plots and diagnostics after burnin:
+```{r}
+chain <- as_draws_df(as.data.frame(chain.mcmc$chain_std[burnin:nrow(chain.mcmc$chain_std),]))
+mcmc_trace(chain)
+mcmc_acf(chain, lags = 100)
+mcmc_hist(chain)
+```
+
+Overall, the diagnostics look good. The chains seem to reach stationarity after the burnin period of 20,000 iterations.
+
+Summary:
+```{r}
+summary <- summarize_draws(chain, "mean", "median", "sd",
+                           ~quantile(.x, probs = c(0.025, 0.975), na.rm = TRUE),      
+                           "ess_bulk", "ess_tail", "rhat")
+kable(summary)
+coef_bayes_ridge <- summary %>% select(variable, mean, `2.5%`, `97.5%`) %>% filter(variable != "lambda")
+```
+
+Compare to built-in ridge regression using Glmnet:
+```{r}
+x_var <- model.matrix(fmla, train)[,-1]
+y_var <- train %>% pull(diabetes)
+fit <- cv.glmnet(scale(x_var), y_var, alpha = 0, family = "binomial")
+coef_glmnet <- as.matrix(coef(fit))
+```
+
+Run Stan fit for comparison:
+```{r, eval=FALSE}
+source("Bayesian/Stan/stan_fit.R")
+```
+
+Again, the above code chunk takes too long to run, so read in summary for Stan fit instead:
+```{r}
+summary_stan <- readRDS("Bayesian/Stan/stan_fit.Rds")
+```
+
+Forest plot comparing estimates:
+```{r}
+label <- colnames(chain.mcmc$design)
+label[which(label == "Gender")] <- "GenderF"
+label[which(label == "height")] <- "Height"
+label[which(label == "smoke2")] <- "Has Smoked"
+label[which(label == "smoke3")] <- "Never Smoked"
+label[which(label == "drink2")] <- "Has Drunk Alcohol"
+label[which(label == "drink3")] <- "Never Drunk Alcohol"
+label[which(label == "history1")] <- "Family History"
+
+res_cmnd <- data.frame(labeltext = rep(label, 3),
+                       mean = c(coef_bayes_ridge$mean, 
+                                summary_stan$mean[2:19], 
+                                coef_glmnet))
+res_cmnd$method <- c(rep("Bayesian Ridge", nrow(res_cmnd)/3),
+                     rep("Stan Fit", nrow(res_cmnd)/3), 
+                     rep("Glmnet", nrow(res_cmnd)/3)
+                     #, rep("Unpenalized", 23)
+                     )
+res_cmnd$lower <- c(coef_bayes_ridge$`2.5%`, summary_stan$`2.5%`[2:19], 
+                    res_cmnd$mean[37:54])
+res_cmnd$upper <- c(coef_bayes_ridge$`97.5%`, summary_stan$`97.5%`[2:19], 
+                    res_cmnd$mean[37:54])
+
+res_cmnd %>% filter(labeltext != "(Intercept)") |>
+  group_by(method) |>
+  forestplot(fn.ci_norm = c(fpDrawNormalCI, fpDrawCircleCI, fpDrawDiamondCI),
+             # title="Comparison of Parameter Estimates",
+             txt_gp=fpTxtGp(label=gpar(cex = 0.9, fontfamily = "Helvetica", fontface="plain"),
+                            ticks=gpar(cex = 0.9),
+                            title=gpar(cex = 0.9),
+                            legend=gpar(cex = 0.9),
+                            summary=gpar(cex = 1),
+                            legend.title = gpar(cex = 1, fontface="plain"),
+                            xlab=gpar(cex = 1)),
+             legend_args = fpLegend(# pos = list(x = 1.3, y = 0.5),
+               # gp = gpar(col = "#CCCCCC", fill = "#F9F9F9"),
+               pos = "right",
+               title = "Method"),
+             boxsize = 0.2, # We set the box size to better visualize the type
+             line.margin = 0.1, # We need to add this to avoid crowding
+             clip = c(-0.5, 1),
+             xlab = "Standardized Parameter Estimate",
+             xticks = seq(from = -0.5, to = 1, by = 0.5),
+             lwd.ci=1, ci.vertices=TRUE, ci.vertices.height = 0.05,
+             col=fpColors(box="black", lines="black", zero = "gray50")
+             , mar = unit(c(.1, .5, .1, .5), "cm")
+  ) |>
+  fp_set_style(box = c("#1170aa", "#fc7d0b", "#a3acb9") |> lapply(function(x) gpar(fill = x, col = "#555555")),
+               default = gpar(vertices = TRUE)) |>
+  fp_add_header("Variable") |> 
+  fp_set_zebra_style("#EFEFEF")
+```
+
+We see from the forest plot that our estimates and credible intervals are consistent with those from the Stan fit. This is reassuring, since Stan implements a more sophisticated MCMC algorithm called Hamiltonian Monte Carlo and generally produces reliable inference results. Since these are standardized estimates, we can compare their magnitude, and we see that Age and BMI are the strongest predictors of diabetes. The ridge regression implemented by Glmnet shrinks more strongly to 0, but the relative magnitudes of the coefficients seem to be consistent between the Glmnet and the Bayesian implementation.
+
+```{r}
+# Predictions using test set
+test <- diabetes_test
+test$smoke <- as.factor(test$smoke)
+test$drink <- as.factor(test$drink)
+test$history <- as.factor(test$history)
+test$diabetes <- as.factor(test$diabetes)
+test$Gender <- as.factor(test$Gender)
+test_scaled <- test %>% mutate_at(names(test)[c(1, 3:18,20)], ~(scale(.) %>% as.vector))
+# Create design matrix for new data
+test_design <- model.matrix(fmla, data = test_scaled)
+coef_bayes <- coef_bayes_ridge$mean
+pred_bayes <- exp(test_design %*% coef_bayes) / (1 + exp(test_design %*% coef_bayes))
+```
+
+### Random Forest for `diabetes` dataset
+
+First, run the Random Forest with class weights implemented as one of the hyper-parameters. The weight for majority class was the proportion of the minority class while the minority class had a weight of 1. The variable importance score was calculated using 'impurity'. The threshold value for classification was the proportion of the positive cases in the training set.
+
+```{r, message=FALSE}
+library(ranger)
+library(caret)
+```
+
+```{r}
+#Setup
+diabetes_train[,c("diabetes","smoke","drink","history","Gender")] <- 
+  lapply(diabetes_train[, c("diabetes","smoke","drink","history","Gender")], as.factor)
+diabetes_test[,c("diabetes","smoke","drink","history","Gender")] <- 
+  lapply(diabetes_test[, c("diabetes","smoke","drink","history","Gender")], as.factor)
+train_d <- subset(diabetes_train,select = -c(site,FPG_final,yr_f, weight,HDL,LDL,FPG))
+test_d <- subset(diabetes_test,select = -c(site,FPG_final,yr_f, weight,HDL,LDL,FPG))
+
+#Use ranger package because of faster computation time
+fit.ranger = ranger(
+  formula = diabetes ~ ., data = train_d,
+  class.weights = c(0.01956133,1),
+  probability = TRUE,
+  importance = "impurity",
+)
+# Make predictions on the test data
+predictions_ranger1 <- predict(fit.ranger, data = test_d)
+predicted_classes1 <- ifelse(predictions_ranger1$predictions[,2]> 0.01956133, 1, 0)
+
+# Create a confusion matrix
+confusionMatrix(as.factor(predicted_classes1), as.factor(test_d$diabetes),positive="1")
+```
+The model works well with a sensitivity of 0.85, which means it does a good job at detecting those with diabetes. A 0.7 specificity is a bit low and can lead to a fair amount of over-diagnoses of diabetes. Now check the variable importance to understand which variables have the most predictive power in building the tree.  
+```{r}
+# Sort the list by absolute values in descending order
+sorted_list <- fit.ranger$variable.importance[order(abs(fit.ranger$variable.importance), decreasing = FALSE)]
+
+# Create horizontal dot plot with adjusted margins
+par(mar = c(5, 7, 4, 2) + 0.1)  # Set margin
+plot(x = sorted_list, y = 1:length(sorted_list), pch = 20, xlim = c(min(sorted_list), max(sorted_list)),
+     xlab = "Importance", ylab = "", yaxt = "n", main = "Feature Importance")
+axis(2, at = 1:length(sorted_list), labels = names(sorted_list), las = 1)
+
+# Add value text next to each dot
+text(x = sorted_list, y = 1:length(sorted_list), labels = round(sorted_list, 2), pos = 4, xpd = TRUE)
+```
+Using the impurity importance metric, the plot shows lots of values have similar predictive values, with the top five being CCR, Triglyceride, BMI, BUN, and ALT. Next, look at down-sampling and its performance.
+```{r}
+#Downsampling Approach
+set.seed(1)
+idx.dat <- c(which(train_d$diabetes == '1'),
+             sample(which(train_d$diabetes == '0'), 3315))
+train_d2 <- train_d[idx.dat,]
+
+fit.ranger2 = ranger(
+  formula = diabetes ~ ., data = train_d2,
+  probability = TRUE,
+  importance = "impurity"
+)
+
+# Make predictions on the test data
+predictions_ranger2 <- predict(fit.ranger2, data = test_d)
+predicted_classes2 <- ifelse(predictions_ranger2$predictions[,2]> 0.5,'1' , '0')
+
+# Create a confusion matrix
+confusionMatrix(as.factor(predicted_classes2), as.factor(test_d$diabetes),positive="1")
+```
+Using down-sampling, there is a slight improvement in performance as sensitvity went up .7 to .72 with about the same sensitivity. 
+```{r}
+#Feature importance plot
+# Sort the list by absolute values in descending order
+sorted_list <- fit.ranger2$variable.importance[order(abs(fit.ranger2$variable.importance), decreasing = FALSE)]
+
+# Create horizontal dot plot with adjusted margins
+par(mar = c(5, 7, 4, 2) + 0.1)  # Set margin
+plot(x = sorted_list, y = 1:length(sorted_list), pch = 20, xlim = c(min(sorted_list), max(sorted_list)),
+     xlab = "Importance", ylab = "", yaxt = "n", main = "Feature Importance")
+axis(2, at = 1:length(sorted_list), labels = names(sorted_list), las = 1)
+
+# Add value text next to each dot
+text(x = sorted_list, y = 1:length(sorted_list), labels = round(sorted_list, 2), pos = 4, xpd = TRUE)
+```
+Looking that variable importance plot, there is a larger spread of values compared to the previous one. This time, Age has the highest predictive power in presence of all other variables with BMI, Triglyceride, SBP, and ALT rounding off the top 5. 
+
+### Cross-validation: AUC and F1 score for `diabetes` dataset
+
+ROC-AUC curves are often used to assess and compare the performance of different models. However, when there is an imbalance in the two classes, AUC is not a good metric for model evaluation when we are interested in predicting the minority class. This is because AUC is sensitive to the large number of true negatives in an imbalanced data set, which can skew the evaluation.  Therefore,  precision and the F1 score are often preferred for model evaluation when dealing with imbalanced classes due to their focus on both false positives and false negatives, providing a more balanced assessment
+
+```{r, message=FALSE, warning=FALSE}
+
+# ROC-AUC for Penalized logistic regression
+library(pROC)
+logit.ROC<-roc(diabetes_test$diabetes,predictions_plogit)
+logit.AUC=pROC::auc(logit.ROC)
+precision.plogit <- posPredValue(as.factor(pred_plogit), as.factor(diabetes_test$diabetes))
+recall.plogit <- sensitivity(as.factor(pred_plogit), as.factor(diabetes_test$diabetes))
+F1.plogit <- 2 * ((precision.plogit * recall.plogit) / (precision.plogit + recall.plogit))
+
+# ROC-AUC for Bayesian approach
+bayes.ROC<-roc(diabetes_test$diabetes,as.numeric(pred_bayes))
+bayes.AUC=pROC::auc(bayes.ROC)
+threshold <- coords(bayes.ROC,"best")$threshold
+predictions.bayes <- as.factor(ifelse(pred_bayes > threshold, 1, 0))
+precision.bayes <- posPredValue(predictions.bayes, as.factor(diabetes_test$diabetes))
+recall.bayes <- sensitivity(predictions.bayes, as.factor(diabetes_test$diabetes))
+F1.bayes <- 2 * ((precision.bayes * recall.bayes) / (precision.bayes + recall.bayes))
+
+# ROC-AUC for Random Forest
+## Class weights
+rf.ROC<-roc(test_d$diabetes,predictions_ranger1$predictions[,2])
+rf.AUC=pROC::auc(rf.ROC)
+precision.rf <- posPredValue(as.factor(predicted_classes1), test_d$diabetes)
+recall.rf <- sensitivity(as.factor(predicted_classes1), test_d$diabetes)
+F1.rf <- 2 * ((precision.rf * recall.rf) / (precision.rf + recall.rf))
+
+## Downsampling
+rf.ROC2<-roc(test_d$diabetes,predictions_ranger2$predictions[,2])
+rf.AUC2=pROC::auc(rf.ROC2)
+cm.rf2<-confusionMatrix(as.factor(predicted_classes2),test_d$diabetes)
+precision.rf2 <- posPredValue(as.factor(predicted_classes2), test_d$diabetes)
+recall.rf2 <- sensitivity(as.factor(predicted_classes2), test_d$diabetes)
+F1.rf2 <- 2 * ((precision.rf2 * recall.rf2) / (precision.rf2 + recall.rf2))
+```
+
+```{r}
+metric <- data.frame(Precision=rbind(precision.plogit,precision.bayes,precision.rf,precision.rf2),Recall=rbind(recall.plogit,recall.bayes,recall.rf,recall.rf2),F1score=rbind(F1.plogit,F1.bayes,F1.rf,F1.rf2),AUC=rbind(logit.AUC,bayes.AUC,rf.AUC,rf.AUC2))
+rownames(metric)<- c("Newton-Raphson","Bayesian","RF_ClassWts","RF_Downsample")
+metric
+
+roc.list <- list(Bayesian=bayes.ROC,NR=logit.ROC,RF=rf.ROC,RF_down=rf.ROC2)
+ggroc(roc.list) + geom_abline(intercept=1,slope = 1,linetype="dashed")+ggtitle("ROC-AUC Curves for the models")+labs(color="Model")
+
+```
+
+It is observed that all the models have comparable precision and recall. The F1 score for the Bayesian logistic regression model is the lowest with a value of 0.806 and the random forest model using downsampling performs the best with F1 score of 0.835. 
+
+### Sensitivity analysis
+
+Since the imputed data was used for building the models, a sensitivity analysis was performed using the complete case dataset. The penalized logistic regression approach was used to compare the beta coefficients from the model using imputed data and model using complete cases.
+
+```{r}
+
+# Penalized.logistic regression ------------------------------
+
+### load the data, and create the design matrix
+Xc = xc = scale(model.matrix(diabetes ~ Age + Gender + BMI + SBP + DBP + height +
+                             Triglyceride + ALT + AST + BUN + CCR + Cholesterol +
+                             factor(smoke) + factor(drink) + factor(history), data = diabetes_complete)[,-1])
+yc = diabetes_complete$diabetes
+
+### penalized logistic regression
+beta0 = glm(yc~Xc, family = "binomial")$coefficients
+plogit.comp = penalized.logit(Xc,yc, beta = beta0, lambda = c(0.013))
+
+estimates <- cbind(output_betas,plogit.comp)
+colnames(estimates)<-c("Estimates_imputed","Estimates_Complete")
+estimates
+```
+
+
+```{r}
+# Plot of betas
+estimates$Variable <- rownames(estimates)
+
+long_df <- pivot_longer(estimates, cols = -Variable, names_to = "Model", values_to = "Estimate") %>%
+  filter(Variable != "(Intercept)") %>%
+  arrange(desc(abs(Estimate)), .by_group = factor("Model")); long_df
+
+ggplot(long_df, aes(x = reorder(Variable,-abs(Estimate)), y = Estimate, fill = Model)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = "Variable", y = "Estimate", color = "Model",title = "Penalized logistic regression model estimates") +
+  scale_fill_manual(values = c("Estimates_Complete" = "salmon","Estimates_imputed"="lightblue"))
+
+```
+The coefficient estimates from the penalized logistic regression using imputed data and complete case data have little difference but are most similar. The variables with high coefficient values in both datasets are Age, BMI, Systolic blood pressure and Triglyceride. 
+Therefore, the use of imputed dataset for making conclusions is valid. 
+
+# Discussion and Conclusion
+
+All the models compared in this study have high precision of 0.99, however sensitivity of the models is low but comparable for the three models. The random forest model using downsampling to adjust for imbalanced classes performs better than the other three models.
+
+The feature importance was evaluated based on the standardized coefficients for the logistic regression models, variable having higher coefficients are considered important. The Gini Impurity index was used for evaluating the variable importance in the random forest models.
+The important variables, i.e variables with largest coefficients in the logistic regression models are Age, BMI, Systolic Blood pressure, Triglycerides. The variables which are important in the random forest models using class weights are CCR, Triglyceride, BMI, BUN, and ALT and using downsampling approach they are Age, BMI, Triglyceride, SBP, and ALT. 
+
+It is noted that Age, BMI,SBP and Triglyceride are consistent important variables across all the models. Therefore,we conclude that Age, BMI, Triglyceride and SBP are the most important predictors of Type 2 diabetes according to our study. 
+
+## Limitations
+
+Below are some advantages and disadvantages of the three methods.
+
+### Penalized Ridge regression
+
+Unlike some other regularization methods like Lasso regression, which can shrink coefficients to zero and perform feature selection, ridge logistic regression retains all predictors in the model. Consequently, while ridge logistic regression improves model stability and reduces variance, it does not discard irrelevant variables
+
+### Bayesian method
+
+
+### RF
+
+Random forest is a solid model to use because of its methodology, which makes it robust against over-fitting. Adjusting for class imbalance, the model performs well and is not biased for the majority class. However, with large amounts of data, it is computationally expensive and performing an exhaustive grid search to optimize the performance can take a long time. 
+
+# References {-}
+- Chen, Y., Zhang, X. P., Yuan, J., Cai, B., Wang, X. L., Wu, X. L., ... & Li, X. Y. (2018). Association of body mass index and age with incident diabetes in Chinese adults: a population-based cohort study. *BMJ open*, 8(9), e021768.
+
+- Göksülük, D. (2011). Penalized logistic regression. *Yüksek Lisans*.
+
+- Heikki Haario, Eero Saksman, Johanna Tamminen "An adaptive Metropolis algorithm," Bernoulli, Bernoulli 7(2), 223-242, (April 2001)
