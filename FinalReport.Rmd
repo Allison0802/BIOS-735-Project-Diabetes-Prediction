@@ -473,8 +473,41 @@ text(x = sorted_list, y = 1:length(sorted_list), labels = round(sorted_list, 2),
 ```
 Using the impurity importance metric, the plot shows lots of values have similar predictive values, with the top five being CCR, Triglyceride, BMI, BUN, and ALT. Next, look at down-sampling and its performance.
 ```{r}
+#Downsampling Approach
+set.seed(1)
+idx.dat <- c(which(train_d$diabetes == '1'),
+             sample(which(train_d$diabetes == '0'), 3315))
+train_d2 <- train_d[idx.dat,]
 
+fit.ranger2 = ranger(
+  formula = diabetes ~ ., data = train_d2,
+  probability = TRUE,
+  importance = "impurity"
+)
+
+# Make predictions on the test data
+predictions_ranger <- predict(fit.ranger2, data = test_d)
+predicted_classes <- ifelse(predictions_ranger$predictions[,2]> 0.5,'1' , '0')
+
+# Create a confusion matrix
+confusionMatrix(as.factor(predicted_classes), as.factor(test_d$diabetes),positive="1")
 ```
+Using down-sampling, there is a slight improvement in performance as sensitvity went up .7 to .72 with about the same sensitivity. 
+```{r}
+#Feature importance plot
+# Sort the list by absolute values in descending order
+sorted_list <- fit.ranger2$variable.importance[order(abs(fit.ranger2$variable.importance), decreasing = FALSE)]
+
+# Create horizontal dot plot with adjusted margins
+par(mar = c(5, 7, 4, 2) + 0.1)  # Set margin
+plot(x = sorted_list, y = 1:length(sorted_list), pch = 20, xlim = c(min(sorted_list), max(sorted_list)),
+     xlab = "Importance", ylab = "", yaxt = "n", main = "Feature Importance")
+axis(2, at = 1:length(sorted_list), labels = names(sorted_list), las = 1)
+
+# Add value text next to each dot
+text(x = sorted_list, y = 1:length(sorted_list), labels = round(sorted_list, 2), pos = 4, xpd = TRUE)
+```
+Looking that variable importance plot, there is a larger spread of values compared to the previous one. This time, Age has the highest predictive power in presence of all other variables with BMI, Triglyceride, SBP, and ALT rounding off the top 5. 
 
 ### Cross-validation: AUC and F1 score for `diabetes` dataset
 
@@ -496,7 +529,9 @@ Unlike some other regularization methods like Lasso regression, which can shrink
 
 ### Bayesian method
 
-### RSF
+### RF
+
+Random forest is a solid model to use because of its methodology, which makes it robust against over-fitting. Adjusting for class imbalance, the model performs well and is not biased for the majority class. However, with large amounts of data, it is computationally expensive and performing an exhaustive grid search to optimize the performance can take a long time. 
 
 ## Future direction
 
