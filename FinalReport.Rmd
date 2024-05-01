@@ -437,7 +437,7 @@ We see from the forest plot that our estimates and credible intervals are consis
 
 ### Random Forest for `diabetes` dataset
 
-First, run the Random Forest with class weights implemented as one of the hyper-parameters. The weight for majority class was the proportion of the minority class while the minority class had a weight of 1. The variable importance score was calculated using 'impurity'. 
+First, run the Random Forest with class weights implemented as one of the hyper-parameters. The weight for majority class was the proportion of the minority class while the minority class had a weight of 1. The variable importance score was calculated using 'impurity'. The threshold value for classification was the proportion of the positive cases in the training set.
 
 ```{r, message=FALSE}
 library(ranger)
